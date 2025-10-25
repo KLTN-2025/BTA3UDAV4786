@@ -34,3 +34,11 @@ button {
 .animate-fadeIn {
   animation: fadeIn 0.6s ease-out;
 }
+
+canvas {
+  cursor: crosshair;
+}
+canvas:active {
+  cursor: move;
+}
+
