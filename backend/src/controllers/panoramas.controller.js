@@ -4,7 +4,14 @@ import models from "../models/index.js";
 export const createPanorama = async (req, res) => {
   try {
     const { roomId, title, camX, camY, camZ, targetX, targetY, targetZ } = req.body;
-    const imageUrl = `${process.env.PUBLIC_BASE_URL}/${req.file.path.replace(/\\/g, "/")}`;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No image uploaded" });
+    }
+
+    const filePath = req.file.path.replace(/\\/g, "/");
+    const imageUrl = `${req.protocol}://${req.get("host")}/${filePath}`;
+
     const pano = await models.Panorama.create({
       roomId,
       title,
@@ -16,11 +23,14 @@ export const createPanorama = async (req, res) => {
       targetY,
       targetZ,
     });
+
     res.status(201).json(pano);
   } catch (e) {
+    console.error("❌ Error creating panorama:", e);
     res.status(400).json({ error: e.message });
   }
 };
+
 
 // Lấy danh sách tất cả panoramas
 export const listPanoramas = async (req, res) => {
