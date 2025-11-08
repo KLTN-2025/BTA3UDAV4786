@@ -7,6 +7,7 @@ import Learning from "./pages/Learning";
 import AiGuide from "./pages/AiGuide";
 import About from "./pages/About";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<MainLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
             <Route index element={<Home />} />
             <Route path="explore" element={<Explore />} />
             <Route path="learning" element={<Learning />} />
