@@ -17,6 +17,13 @@ export const HotspotAPI = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+
+   
+    if (!res.ok) {
+      const errorData = await res.json();
+      console.error("Lỗi từ API server:", errorData);
+      throw new Error(errorData.error || "Lỗi không xác định từ server");
+    }
     return res.json();
   },
 

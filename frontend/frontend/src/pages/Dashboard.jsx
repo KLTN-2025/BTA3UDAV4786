@@ -5,11 +5,14 @@ import { HotspotAPI } from "../api/hotspotApi";
 import { QuizAPI } from "../api/quizApi";
 import * as PANOLENS from "panolens";
 import * as THREE from "three";
+import UserManager from '../components/UserManager';
+import Leaderboard from '../components/Leaderboard';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("museum");
   const [rooms, setRooms] = useState([]);
   const [panoramas, setPanoramas] = useState([]);
+  const [allPanoramas, setAllPanoramas] = useState([]);
   const [hotspots, setHotspots] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [selectedPanorama, setSelectedPanorama] = useState(null);
@@ -25,6 +28,9 @@ export default function Dashboard() {
   const viewerContainerRef = useRef(null);
   const panoViewerRef = useRef(null);
   const panoObjRef = useRef(null);
+  const formRef = useRef(form);
+
+  const [currentPanoData, setCurrentPanoData] = useState(null);
 
   const [questions, setQuestions] = useState([]); 
   const [quizForm, setQuizForm] = useState({ 
@@ -38,21 +44,41 @@ export default function Dashboard() {
 
   const [editingHotspot, setEditingHotspot] = useState(null);
 
-  // ===== LOAD DATA =====
+ 
   useEffect(() => {
     loadRooms();
     loadQuestions();
+    loadAllPanoramas();
   }, []);
 
+ useEffect(() => {
+    // Mỗi khi 'form' thay đổi, cập nhật 'formRef'
+    formRef.current = form;
+  }, [form]);
+
+  useEffect(() => {
+    if (showViewer && currentPanoData && viewerContainerRef.current) {
+      
+      // Thêm một độ trễ (50ms) để đảm bảo trình duyệt 
+      // đã paint xong div modal trước khi Panolens đo kích thước.
+      const timer = setTimeout(() => {
+        initPanoramaViewer(currentPanoData.pano, currentPanoData.hotspotData);
+      }, 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [showViewer, currentPanoData]);
+
+
   const loadRooms = async () => setRooms(await RoomAPI.list());
+  const loadAllPanoramas = async () => setAllPanoramas(await PanoramaAPI.list());
   const loadPanoramas = async (roomId) =>
     setPanoramas(await PanoramaAPI.getByRoom(roomId));
   const loadHotspots = async (panoId) =>
     setHotspots(await HotspotAPI.getByPanorama(panoId));
 
   const loadQuestions = async () => setQuestions(await QuizAPI.list());
-  // ===== CRUD =====
-  // ===== DELETE FUNCTIONS =====
+
 const handleDeleteRoom = async (roomId) => {
   if (!window.confirm("Bạn có chắc muốn xóa Room này không?")) return;
   await RoomAPI.delete(roomId);
@@ -154,104 +180,132 @@ const handleQuizFormChange = (e) => {
 
   // ===== VIEWER =====
   const openViewer = async (pano) => {
-  setSelectedPanorama(pano.id);
-  setShowViewer(true);
-  const data = await HotspotAPI.getByPanorama(pano.id);
-  setHotspots(data);
+    setSelectedPanorama(pano.id);
+    const data = await HotspotAPI.getByPanorama(pano.id);
 
-  // 🧩 Fix: ép lại link ảnh thật để không bị blob
-  let fixedUrl = pano.imageUrl;
-  if (fixedUrl.startsWith("blob:") || fixedUrl.startsWith("/uploads")) {
-    fixedUrl = `http://localhost:4000${pano.imageUrl.replace("blob:", "").replace(/^\/+/, "/")}`;
-  }
-  pano.imageUrl = fixedUrl;
-
-  console.log("🖼️ Final panorama URL used:", fixedUrl);
-  setTimeout(() => initPanoramaViewer(pano, data), 200);
-};
+    let fixedUrl = pano.imageUrl;
+    if (fixedUrl.startsWith("blob:") || fixedUrl.startsWith("/uploads")) {
+      fixedUrl = `http://localhost:4000${pano.imageUrl.replace("blob:", "").replace(/^\/+/, "/")}`;
+    }
+    pano.imageUrl = fixedUrl;
+    setCurrentPanoData({ pano: pano, hotspotData: data });
+    setShowViewer(true); 
+  };
 
 
- const initPanoramaViewer = (pano, hotspotData) => {
-  if (!viewerContainerRef.current) return;
-  viewerContainerRef.current.innerHTML = "";
-  viewerContainerRef.current.style.pointerEvents = "auto";
-
-  if (panoViewerRef.current) {
-    panoViewerRef.current.dispose();
-    panoViewerRef.current = null;
-  }
-
-  //  Tạo viewer trước
-  const viewer = new PANOLENS.Viewer({
-    container: viewerContainerRef.current,
-    autoRotate: false,
-    cameraFov: 80,
-  });
-  panoViewerRef.current = viewer;
-
-  //  Tạo panorama
-  const panorama = new PANOLENS.ImagePanorama(pano.imageUrl);
-  window._pano = panorama;
-  panorama.crossOrigin = "anonymous";
-  panoObjRef.current = panorama;
-
-  //  Gắn panorama vào viewer trước khi đăng ký click
-  viewer.add(panorama);
-
-  //  Bắt sự kiện panorama đã sẵn sàng
-  panorama.addEventListener("enter", () => {
-    console.log("🟢 Panorama entered, mesh ready?", !!panorama.mesh);
-
-    // Nếu mesh chưa tồn tại, thử đợi 1s để WebGL build xong
-    if (!panorama.mesh) {
-      console.warn("⚠️ Mesh chưa sẵn sàng, retry sau 1s...");
-      setTimeout(() => {
-        console.log("🔁 Kiểm tra lại mesh:", !!panorama.mesh);
-      }, 1000);
+const initPanoramaViewer = (pano, hotspotData) => {
+    if (!viewerContainerRef.current) {
       return;
     }
+    
+    viewerContainerRef.current.innerHTML = "";
+    viewerContainerRef.current.style.pointerEvents = "auto";
 
-    // Hiển thị hotspot
-    hotspotData.forEach((h) => {
-      const spot = new PANOLENS.Infospot(400, PANOLENS.DataImage.Info);
-      spot.position.set(h.posX, h.posY, h.posZ);
-      spot.addHoverText(h.label);
-      panorama.add(spot);
+    const viewer = new PANOLENS.Viewer({
+      container: viewerContainerRef.current,
+      autoRotate: false,
+      cameraFov: 80,
     });
+    panoViewerRef.current = viewer; 
+
+    const panorama = new PANOLENS.ImagePanorama(pano.imageUrl);
+    window._pano = panorama;
+    panorama.crossOrigin = "anonymous";
+    panoObjRef.current = panorama; 
+
+    // === 16 điểm gợi ý đều 360 độ ===
+const suggestionPoints = [];
+const radius = 5000;      // khoảng cách từ tâm
+const height = -500;      // cao thấp của hotspot
+const count = 16;         // số điểm muốn tạo
+
+for (let i = 0; i < count; i++) {
+  const angle = (i / count) * Math.PI * 2; // chia đều 360°
+
+  const x = Math.sin(angle) * radius;
+  const z = Math.cos(angle) * radius;
+
+  suggestionPoints.push({
+    label: `Điểm ${i + 1}`, 
+    pos: new THREE.Vector3(x, height, z)
   });
+}
 
-  //  Xử lý click
-  panorama.addEventListener("click", async (event) => {
-    if (!panorama.mesh) {
-      console.warn("⚠️ Mesh vẫn chưa sẵn sàng — click bị bỏ qua.");
-      return;
-    }
 
-    const raycaster = panoViewerRef.current?.raycaster;
-    const intersects = raycaster.intersectObject(panorama.mesh, true);
-    if (!intersects.length) return alert("⚠️ Không xác định được vị trí click!");
+    
+    panorama.addEventListener("load", () => {
+      const panoInstance = panorama; 
+      hotspotData.forEach((h) => {
+        const spot = new PANOLENS.Infospot(400, PANOLENS.DataImage.Info);
+        spot.position.set(h.x || h.posX, h.y || h.posY, h.z || h.posZ); 
+        spot.addHoverText(h.label);
+        panoInstance.add(spot);
+      });
 
-    const pos = intersects[0].point;
-    console.log("✅ Click position:", pos);
+      suggestionPoints.forEach((p) => {
+        const suggestionSpot = new PANOLENS.Infospot(
+          300, 
+          PANOLENS.DataImage.Add 
+        );
+        
+        suggestionSpot.position.copy(p.pos);
+        suggestionSpot.addHoverText(`Chọn vị trí: ${p.label}`);
+        suggestionSpot.addEventListener("click", async () => {
+          const currentForm = formRef.current;
 
-    if (!form.hotspotLabel || !form.toPanoramaId)
-      return alert("⚠️ Nhập label và chọn panorama đích trước!");
+          if (!currentForm.hotspotLabel || !currentForm.toPanoramaId) {
+            return alert(
+              "⚠️ Vui lòng nhập Label và Chọn panorama đích TRƯỚC KHI click vào điểm gợi ý!"
+            );
+          }
 
-    const newHotspot = {
-      fromPanoramaId: pano.id,
-      toPanoramaId: form.toPanoramaId,
-      label: form.hotspotLabel,
-      posX: parseFloat(pos.x.toFixed(3)),
-      posY: parseFloat(pos.y.toFixed(3)),
-      posZ: parseFloat(pos.z.toFixed(3)),
-    };
+          const pos = p.pos;
+          
+          const newHotspot = {
+            fromPanoramaId: pano.id,
+            toPanoramaId: currentForm.toPanoramaId, 
+            label: currentForm.hotspotLabel,       
+            x: parseFloat(pos.x.toFixed(3)), 
+            y: parseFloat(pos.y.toFixed(3)), 
+            z: parseFloat(pos.z.toFixed(3)), 
+          };
 
-    await HotspotAPI.create(newHotspot);
-    alert(`✅ Tạo hotspot "${newHotspot.label}" thành công!`);
-    loadHotspots(pano.id);
-    setForm({ ...form, hotspotLabel: "", toPanoramaId: "" });
-  });
-};
+          try {
+            await HotspotAPI.create(newHotspot);
+
+            alert(
+              `✅ Tạo hotspot "${newHotspot.label}" tại vị trí "${p.label}" thành công!`
+            );
+
+            loadHotspots(pano.id);
+
+            const newPermSpot = new PANOLENS.Infospot(
+              400,
+              PANOLENS.DataImage.Info 
+            );
+            newPermSpot.position.copy(pos);
+            newPermSpot.addHoverText(newHotspot.label);
+            panoInstance.add(newPermSpot);
+
+            panoInstance.remove(suggestionSpot);
+            
+            setForm(prevForm => ({ 
+              ...prevForm, 
+              hotspotLabel: "", 
+              toPanoramaId: "" 
+            }));
+
+          } catch (error) {
+            console.error(" Không thể tạo hotspot:", error);
+            alert(`❌ Lỗi khi tạo hotspot: ${error.message}`);
+          }
+        }); 
+
+        panoInstance.add(suggestionSpot);
+      }); 
+    }); 
+    viewer.add(panorama);
+  };
 
 
 
@@ -290,6 +344,18 @@ const handleQuizFormChange = (e) => {
           onClick={() => setActiveTab("quiz")}
         >
           ❓ Quản lý Câu hỏi
+        </button>
+        <button
+          style={activeTab === "users" ? tabBtnActive : tabBtn}
+          onClick={() => setActiveTab("users")}
+        >
+          👥 Quản lý Người dùng
+        </button>
+        <button
+          style={activeTab === "leaderboard" ? tabBtnActive : tabBtn}
+          onClick={() => setActiveTab("leaderboard")}
+        >
+          🏆 Bảng Xếp Hạng
         </button>
       </nav>
 
@@ -452,34 +518,49 @@ const handleQuizFormChange = (e) => {
               style={inputStyle}
             >
               <option value="">→ Chọn đích</option>
-              {panoramas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
+              {panoramas
+          .filter((p) => p.id !== selectedPanorama) // Lọc bỏ pano hiện tại
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.title}
+            </option>
+          ))}
             </select>
           </div>
 
           <table style={tableStyle}>
-            <thead>
-              <tr style={{ background: "#efebe9" }}>
-                <th>Label</th>
-                <th>To</th>
-                <th>Pos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hotspots.map((h) => (
-                <tr key={h.id}>
-                  <td>{h.label}</td>
-                  <td>{h.toPanoramaId?.slice(0, 6)}</td>
-                  <td>
-                    {h.posX}, {h.posY}, {h.posZ}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <thead>
+          <tr style={{ background: "#efebe9" }}>
+            <th style={{ width: "40%" }}>Label</th>
+            <th style={{ width: "30%" }}>To</th>
+            <th style={{ width: "20%" }}>Pos</th>
+            <th style={{ width: "10%" }}>Xóa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {hotspots.map((h) => (
+            <tr key={h.id}>
+              <td>{h.label}</td>
+              <td>{h.toPanoramaId?.slice(0, 6)}...</td>
+              <td>
+                {/* Đọc từ x, y, z */}
+                {h.x}, {h.y}, {h.z}
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <button
+                  onClick={() =>
+                    handleDeleteHotspot(h.id, h.fromPanoramaId)
+                  }
+                  style={deleteBtnStyle} 
+                  title={`Xóa hotspot "${h.label}"`}
+                >
+                  🗑️
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
         </section>
       </main>
         )}
@@ -596,6 +677,9 @@ const handleQuizFormChange = (e) => {
         </main>
       )}
 
+      {activeTab === "users" && <UserManager />}
+      {activeTab === "leaderboard" && <Leaderboard />}
+
      {showViewer && (
   <div style={viewerModal}>
     <div ref={viewerContainerRef} style={viewerBox}></div>
@@ -645,7 +729,8 @@ const handleQuizFormChange = (e) => {
         }}
       >
         <option value="">→ Chọn panorama đích</option>
-        {panoramas.map((p) => (
+        {allPanoramas.filter((p) => p.id !== selectedPanorama)
+        .map((p) => (
           <option key={p.id} value={p.id}>
             {p.title}
           </option>
@@ -659,12 +744,18 @@ const handleQuizFormChange = (e) => {
           lineHeight: "1.4em",
         }}
       >
-        👉 Sau khi nhập Label và chọn đích, click vào vị trí trong ảnh để đặt
-        hotspot.
+        👉 Sau khi nhập Label và chọn đích, click vào một trong các điểm 
+        gợi ý ! trong ảnh để đặt hotspot.
       </p>
     </div>
 
-    <button onClick={() => setShowViewer(false)} style={btnClose}>
+    <button 
+      onClick={() => {
+        setShowViewer(false);
+        setCurrentPanoData(null); 
+      }} 
+      style={btnClose}
+    >
       ✖️ Đóng Viewer
     </button>
   </div>
@@ -678,7 +769,7 @@ const handleQuizFormChange = (e) => {
   );
 }
 
-// ===== STYLE OBJECTS =====
+
 const sectionStyle = {
   flex: 1,
   background: "#fff",
@@ -780,6 +871,7 @@ const tabBtn = {
   color: "#3e2723",
   fontWeight: "500",
   opacity: 0.7,
+  
 };
 
 const tabBtnActive = {
