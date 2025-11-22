@@ -3,11 +3,10 @@ export default (sequelize, DataTypes) => {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     fromPanoramaId: { type: DataTypes.UUID, allowNull: false },
     toPanoramaId: { type: DataTypes.UUID, allowNull: false },
-    // vị trí hotspot trên "sàn" trong không gian nội bộ
+    // vị trí hotspot trên "sàn"
     x: { type: DataTypes.FLOAT, allowNull: false },
     y: { type: DataTypes.FLOAT, allowNull: false, defaultValue: -1.499 },
     z: { type: DataTypes.FLOAT, allowNull: false },
-    // optional: hướng nhìn khi tới panorama đích
     lookAtX: { type: DataTypes.FLOAT, defaultValue: 0 },
     lookAtY: { type: DataTypes.FLOAT, defaultValue: 0 },
     lookAtZ: { type: DataTypes.FLOAT, defaultValue: -1 },
