@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import LogoCorner from "../components/LogoCorner";
+
 
 const museumsData = [
   {
@@ -48,6 +51,7 @@ const museumsData = [
 ];
 
 export default function Explore() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
 
   const filteredMuseums = museumsData.filter(
@@ -58,11 +62,12 @@ export default function Explore() {
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-serif relative overflow-hidden">
-      {/* Hiệu ứng nền */}
+      <LogoCorner onClick={() => navigate("/")} />
+           
       <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1601297183309-23be8e6e5a04')] bg-cover bg-center opacity-30 blur-sm"></div>
       <div className="absolute inset-0 bg-gradient-to-b from-[#0b0f1a]/95 via-[#0b0f1a]/90 to-[#0b0f1a]/95"></div>
 
-      {/* Banner */}
+     
       <section className="relative h-[500px] flex flex-col items-center justify-center text-center bg-[url('https://images.unsplash.com/photo-1596210395254-2873a42f9b75')] bg-cover bg-center">
         <div className="absolute inset-0 bg-[#0b0f1a]/70"></div>
         <div className="relative z-10 px-6">
@@ -75,7 +80,7 @@ export default function Explore() {
         </div>
       </section>
 
-      {/* Mô tả tổng quan */}
+    
       <section className="relative max-w-4xl mx-auto text-center mt-20 px-6">
         <h2 className="text-4xl font-bold text-[#f5e6c8] mb-6">✨ Hành trình về miền ký ức</h2>
         <p className="text-[#d1c7af] text-lg leading-relaxed">
@@ -85,7 +90,7 @@ export default function Explore() {
         </p>
       </section>
 
-      {/* Thanh tìm kiếm */}
+     
       <section className="relative max-w-2xl mx-auto mt-12 px-6">
         <input
           type="text"
@@ -96,7 +101,7 @@ export default function Explore() {
         />
       </section>
 
-      {/* Danh sách bảo tàng dạng dọc toàn màn hình */}
+     
       <section className="relative max-w-6xl mx-auto mt-20 space-y-32 px-6 pb-32">
         {filteredMuseums.map((museum, index) => (
           <div
@@ -105,7 +110,7 @@ export default function Explore() {
               index % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"
             }`}
           >
-            {/* Ảnh lớn */}
+           
             <div className="md:w-1/2 h-[500px] relative overflow-hidden">
               <img
                 src={museum.image}
@@ -118,7 +123,7 @@ export default function Explore() {
               </div>
             </div>
 
-            {/* Nội dung chi tiết */}
+          
             <div className="md:w-1/2 p-10 flex flex-col justify-between">
               <div>
                 <h3 className="text-4xl font-bold text-[#f5e6c8] mb-4">{museum.name}</h3>
@@ -136,7 +141,7 @@ export default function Explore() {
         ))}
       </section>
 
-      {/* Footer cổ kính */}
+  
       <footer className="relative text-center py-10 text-[#c0b69a] border-t border-[#c4b998]/30 mt-20">
         <p className="text-sm">© 2025 Khám Phá Bảo Tàng – Một hành trình ngược dòng thời gian</p>
         <p className="text-xs mt-2 italic">
@@ -144,7 +149,6 @@ export default function Explore() {
         </p>
       </footer>
 
-      {/* Hiệu ứng sương khói */}
       <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-[#f5e6c8]/10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
       <div className="absolute bottom-0 right-0 w-[700px] h-[700px] bg-[#d4b76a]/10 blur-3xl rounded-full translate-x-1/3 translate-y-1/3 animate-pulse"></div>
     </div>
