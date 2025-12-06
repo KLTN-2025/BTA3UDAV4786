@@ -15,7 +15,7 @@ export const sequelize = new Sequelize(
 
 try {
   await sequelize.authenticate();
-  console.log("✅ PostgreSQL connected successfully");
+  console.log("PostgreSQL connected successfully");
 } catch (err) {
-  console.error("❌ PostgreSQL connection error:", err.message);
+  console.error("PostgreSQL connection error:", err.message);
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../api/config";
-import { FaCrown, FaHistory, FaUserGraduate, FaRedo } from "react-icons/fa";
+import { FaCrown, FaHistory, FaUserGraduate, FaRedo, FaHome } from "react-icons/fa";
 
 export default function Learning() {
   const { user, logout } = useContext(AuthContext);
@@ -61,7 +61,6 @@ export default function Learning() {
 
   const finishQuiz = async (finalScore) => {
     setShowResult(true);
-    // Gọi API lưu điểm (kèm Cookie Session)
     await fetch(`${API_BASE_URL}/quiz/result`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,7 +90,6 @@ export default function Learning() {
     
       <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center mb-8 border-b border-[#3e2723] pb-4 gap-4">
         
-        {/* Avatar & Tên User (Lấy từ Google) */}
         <div className="flex items-center gap-4">
           <div className="relative">
             <img 
@@ -110,7 +108,16 @@ export default function Learning() {
         </div>
 
        
-        <div className="flex bg-white rounded-lg p-1 shadow-sm">
+        <div className="flex bg-white rounded-lg p-1 shadow-sm items-center gap-2">
+             <button 
+                onClick={() => navigate("/")} 
+                className="px-4 py-2 rounded-md hover:bg-gray-100 transition flex items-center gap-2 text-gray-700 font-medium"
+                title="Về trang chủ"
+             >
+                <FaHome /> Trang chủ
+             </button>
+             <div className="w-[1px] h-6 bg-gray-300 mx-1"></div> {/* Đường kẻ dọc ngăn cách */}
+
              <button 
                 onClick={() => setActiveTab('quiz')} 
                 className={`px-4 py-2 rounded-md transition ${activeTab === 'quiz' ? 'bg-[#4e342e] text-white' : 'hover:bg-gray-100'}`}
@@ -197,7 +204,7 @@ export default function Learning() {
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden animate-fadeIn">
                 <div className="p-6 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white flex items-center gap-3">
                     <FaCrown className="text-2xl animate-bounce" />
-                    <h3 className="font-bold text-xl">Bảng Phong Thần</h3>
+                    <h3 className="font-bold text-xl">Bảng Xếp Hạng</h3>
                 </div>
                 <div>
                     {leaderboard.map((item, idx) => (

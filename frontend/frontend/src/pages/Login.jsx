@@ -1,5 +1,5 @@
 import { useContext, useEffect } from "react";
-import { FaGoogle } from "react-icons/fa";
+import { FaGoogle, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext"; 
 
@@ -42,6 +42,12 @@ function Login() {
         >
           <FaGoogle className="text-red-500 text-xl" />
           <span>Đăng nhập với Google</span>
+        </button>
+        <button 
+            onClick={() => navigate("/")}
+            className="mt-6 flex items-center gap-2 text-gray-300 hover:text-white text-sm transition-colors duration-200 hover:underline"
+        >
+            <FaArrowLeft /> Quay về trang chủ
         </button>
       </div>
     </div>

@@ -11,7 +11,6 @@ export const getCurrentUser = (req, res) => {
   }
 };
 
-// Đăng xuất
 export const logout = (req, res, next) => {
   req.logout(function(err) {
     if (err) { return next(err); }

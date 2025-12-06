@@ -1,11 +1,17 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import models from '../models/index.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const User = models.User;
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1046266491335-1vvebb8ppdsh60n7p0dmcrp5gm4m2kcs.apps.googleusercontent.com';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error("Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET trong file .env");
+}
 
 passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
@@ -19,7 +25,7 @@ passport.use(new GoogleStrategy({
       const displayName = profile.displayName;
       const photoUrl = profile.photos[0]?.value;
 
-      // 1. Tìm user trong DB
+      //Tìm user trong DB
       let user = await User.findOne({ where: { email: email } });
 
       if (user) {
@@ -30,8 +36,7 @@ passport.use(new GoogleStrategy({
         }
         return done(null, user);
       } else {
-        // 2. Nếu chưa có thì tạo mới
-        // Tạo username an toàn (xóa khoảng trắng + số ngẫu nhiên)
+        // Tạo username
         const safeUsername = displayName.replace(/\s/g, '') + Math.floor(Math.random() * 1000);
         
         user = await User.create({

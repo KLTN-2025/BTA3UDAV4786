@@ -21,7 +21,6 @@ export const HotspotAPI = {
    
     if (!res.ok) {
       const errorData = await res.json();
-      console.error("Lỗi từ API server:", errorData);
       throw new Error(errorData.error || "Lỗi không xác định từ server");
     }
     return res.json();

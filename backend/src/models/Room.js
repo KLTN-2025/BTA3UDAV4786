@@ -4,7 +4,7 @@ export default (sequelize, DataTypes) => {
     name: { type: DataTypes.STRING, allowNull: false },
     description: DataTypes.TEXT,
     floor: DataTypes.INTEGER,
-  });
+  },);
   Room.associate = (models) => {
     Room.hasMany(models.Panorama, { foreignKey: "roomId" });
   };

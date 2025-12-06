@@ -29,7 +29,8 @@ export default (sequelize, DataTypes) => {
       defaultValue: 'user',
     }
   }, {
-    timestamps: true
+    timestamps: true,
+    paranoid: true
   });
   
   return User;

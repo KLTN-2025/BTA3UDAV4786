@@ -36,6 +36,33 @@ export const createQuestion = async (req, res) => {
   }
 };
 
+
+export const updateQuestion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { question, options, correctAnswer } = req.body;
+
+    const q = await models.Question.findByPk(id);
+    if (!q) {
+      return res.status(404).json({ message: 'Không tìm thấy câu hỏi.' });
+    }
+
+    if (!question || !Array.isArray(options) || options.length !== 4 || !correctAnswer) {
+      return res.status(400).json({ message: 'Dữ liệu không hợp lệ.' });
+    }
+
+    await q.update({
+      question,
+      options,
+      correctAnswer
+    });
+
+    res.json(q);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi cập nhật', error: error.message });
+  }
+};
+
 export const deleteQuestion = async (req, res) => {
   try {
     const { id } = req.params;

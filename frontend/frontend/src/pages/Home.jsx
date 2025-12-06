@@ -6,15 +6,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { ModeContext } from "../context/ModeContext";
 import { PanoramaAPI } from "../api/panoramaApi";
 import { HotspotAPI } from "../api/hotspotApi";
+import { ArtifactAPI } from "../api/artifactApi";
 import HotspotBar from "../components/HotspotBar";
 import PanoramaScene from "../components/PanoramaScene";
 import ControlBar from "../components/ControlBar";
 import LogoCorner from "../components/LogoCorner";
-import AIGuide from "../components/AIGuide";
 import Navbar from "../components/Navbar";
 import ChatBox from "../components/ChatBox";
+import GuideChatModal from "../components/GuideChatModal"
+import HistoryModal from "../components/HistoryModal";
+import ArtifactModal from "../components/ArtifactModal";
+import ExploreModal from "../components/ExploreModal";
+import TimelineDrawer from "../components/TimelineDrawer";
+import { FaChevronRight } from "react-icons/fa";
 import { AuthContext } from "../context/AuthContext";
 import { useChat } from "../hooks/useChat";
+import XRWrapper, { xrStore } from "../components/XRWrapper";
+import { confirmDelete, notifySuccess, notifyError } from '../utils/alertHelper';
 
 export default function Home() {
   const { mode } = useContext(ModeContext);
@@ -25,19 +33,26 @@ export default function Home() {
   const panoRef = useRef();
   const canvasRef = useRef(null);
 
- 
   const roomId = searchParams.get("room");
   
   const currentUsername = user?.displayName || user?.username || `Khách ${Math.floor(Math.random() * 1000)}`;
   const { messages, sendMessage, clearMessages } = useChat(roomId, currentUsername);
   const [showChat, setShowChat] = useState(!!roomId);
+  const [showExplore, setShowExplore] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
 
-
-   // States dữ liệu
   const [allPanoramas, setAllPanoramas] = useState([]);
   const [allHotspots, setAllHotspots] = useState([]);
   const [currentPano, setCurrentPano] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [visitHistory, setVisitHistory] = useState([]);
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [selectedChatSpot, setSelectedChatSpot] = useState(null);
+  const handleToggleVR = () => {
+    xrStore.enterVR();
+  };
   
 
   useEffect(() => {
@@ -51,9 +66,8 @@ export default function Home() {
         setAllPanoramas(panos);
         setAllHotspots(spots);
 
-        // Chọn pano đầu tiên làm mặc định nếu có
+        // Chọn pano đầu tiên làm mặc định
         if (panos.length > 0) {
-          // Xử lý URL ảnh
           const startPano = processPanoUrl(panos[0]);
           setCurrentPano(startPano);
         }
@@ -72,6 +86,25 @@ export default function Home() {
     }
   }, [roomId]);
 
+  useEffect(() => {
+    if (!currentPano) return;
+    const savedHistory = JSON.parse(localStorage.getItem("visit_history") || "[]");
+    const filteredHistory = savedHistory.filter(h => h.id !== currentPano.id);
+
+    const newEntry = {
+      id: currentPano.id,
+      title: currentPano.title,
+      image: currentPano.imageUrl,
+      timestamp: Date.now()
+    };
+
+    const newHistory = [newEntry, ...filteredHistory].slice(0, 20);
+
+    setVisitHistory(newHistory);
+    localStorage.setItem("visit_history", JSON.stringify(newHistory));
+
+  }, [currentPano]);
+
   const handleLeaveGroup = () => {
     if (window.confirm("Bạn có chắc muốn rời nhóm và xóa đoạn chat?")) {
         setSearchParams({}); 
@@ -81,7 +114,8 @@ export default function Home() {
     }
   };
 
-  // Hàm xử lý URL ảnh
+  
+
   const processPanoUrl = (pano) => {
     let fixedUrl = pano.imageUrl;
     if (fixedUrl.startsWith("blob:") || fixedUrl.startsWith("/uploads")) {
@@ -90,22 +124,51 @@ export default function Home() {
     return { ...pano, imageUrl: fixedUrl };
   };
 
-  // Lấy hotspots của pano hiện tại
   const currentPanoHotspots = allHotspots.filter(
     (h) => currentPano && h.fromPanoramaId === currentPano.id
   );
 
 
-  const handleHotspotClick = (spot) => {
-    const nextPano = allPanoramas.find((p) => p.id === spot.toPanoramaId);
-    if (nextPano) {
-      console.log("Chuyển đến:", nextPano.title);
-      setCurrentPano(processPanoUrl(nextPano));
-    } else {
-      console.warn("Không tìm thấy pano đích:", spot.toPanoramaId);
+  const handleHotspotClick = async (spot) => {
+    if (spot.type === 'nav' || !spot.type) {
+        const nextPano = allPanoramas.find((p) => p.id === spot.toPanoramaId);
+        if (nextPano) {
+          setCurrentPano(processPanoUrl(nextPano));
+        }
+    } 
+    
+    else if (spot.type === 'info' && spot.artifactId) {
+        try {
+            if (spot.artifact) {
+                setSelectedArtifact(spot.artifact);
+            } 
+            else {
+                const data = await ArtifactAPI.getById(spot.artifactId);
+                setSelectedArtifact(data);
+            }
+        } catch (e) {
+            console.error("Lỗi tải vật phẩm:", e);
+        }
+    }
+
+    else if (spot.type === 'chat') {
+       setSelectedChatSpot({
+           name: spot.label,
+           instruction: spot.instruction, 
+           knowledge: spot.knowledge     
+       });
     }
   };
 
+
+  const handleViewArtifactFromChat = (artifactData) => {
+      setSelectedArtifact({
+          id: artifactData.external_id || artifactData.id,
+          name: artifactData.name,
+          description: artifactData.description,
+          imageUrl: artifactData.imageUrl
+      });
+  };
  
   const handleBarSelect = (spot) => {
     const targetPano = allPanoramas.find(p => p.id === spot.id);
@@ -127,7 +190,7 @@ export default function Home() {
 
     
     let shareUrl = "";
-    const currentUrl = window.location.href; // Link trang web hiện tại
+    const currentUrl = window.location.href;
 
     if (platform === 'facebook') {
       shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`;
@@ -142,24 +205,43 @@ export default function Home() {
     alert("📸 Đã chụp ảnh góc nhìn hiện tại và tải xuống máy bạn! Hãy dùng nó để đăng bài nhé.");
   };
 
+  const handleHistorySelect = (panoId) => {
+    const targetPano = allPanoramas.find(p => p.id === panoId);
+    if (targetPano) {
+      setCurrentPano(processPanoUrl(targetPano));
+    }
+  };
+
+  const handleClearHistory = () => {
+    setVisitHistory([]);
+    localStorage.removeItem("visit_history");
+  };
+
   if (loading) return <div className="flex h-screen items-center justify-center bg-black text-white">Đang tải dữ liệu bảo tàng...</div>;
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
-      <Navbar onShare={handleScreenshotAndShare} />
+      <Navbar 
+      onShare={handleScreenshotAndShare}
+      onToggleHistory={() => setShowHistory(!showHistory)}
+      onOpenExplore={() => setShowExplore(true)}
+       />
       <LogoCorner onClick={() => navigate("/")} />
-      <AIGuide />
+      
       
       {currentPano ? (
-        <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [0, 0, 0.1], fov: 75 }} className="absolute inset-0" ref={canvasRef}>
+        <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [0, 0, 0.1], fov: 75 }} className="absolute inset-0" ref={canvasRef} >
+          <XRWrapper>
           <Suspense fallback={null}>
             <PanoramaScene
               ref={panoRef}
               image={currentPano.imageUrl}
               hotspots={currentPanoHotspots}
               onHotspotClick={handleHotspotClick}
+              
             />
           </Suspense>
+          </XRWrapper>
         </Canvas>
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-white">
@@ -169,9 +251,53 @@ export default function Home() {
 
       <div className="absolute inset-0 pointer-events-none" />
 
+      {!showTimeline && (
+          <button 
+            onClick={() => setShowTimeline(true)}
+            className="absolute top-24 left-0 z-40 bg-gradient-to-r from-[#4e342e] to-[#3e2723] text-white pl-4 pr-6 py-2 rounded-r-full shadow-lg flex items-center gap-3 group border-l-4 border-yellow-500"
+          >
+          
+            <div className="flex flex-col items-start">
+                <span className="text-[10px] text-yellow-200 uppercase tracking-widest leading-none mb-0.5">Khám phá</span>
+                <span className="font-bold text-sm font-serif leading-none">Lịch Sử DTU</span>
+            </div>
+            <FaChevronRight className="text-white/50" />
+          </button>
+      )}
+
+      {showTimeline && (
+        <TimelineDrawer onClose={() => setShowTimeline(false)} />
+      )}
+
+      {showExplore && (
+        <ExploreModal 
+          onClose={() => setShowExplore(false)}
+        />
+      )}
+
+      {showHistory && (
+        <HistoryModal 
+          history={visitHistory}
+          onSelect={handleHistorySelect}
+          onClose={() => setShowHistory(false)}
+          onClear={handleClearHistory}
+        />
+      )}
+
+      {selectedArtifact && (
+        <ArtifactModal 
+            artifact={selectedArtifact} 
+            onClose={() => {
+                setSelectedArtifact(null);
+                window.speechSynthesis.cancel();
+            }} 
+        />
+      )}
+
       <ControlBar
         onZoomIn={() => panoRef.current?.zoomIn()}
         onZoomOut={() => panoRef.current?.zoomOut()}
+        onToggleVR={handleToggleVR}
       />
 
       {mode === "point" && (
@@ -203,6 +329,16 @@ export default function Home() {
             <span>💬</span> Chat ({messages.length})
         </button>
       )}
+
+      {selectedChatSpot && (
+          <GuideChatModal 
+             guideName={selectedChatSpot.name}
+             instruction={selectedChatSpot.instruction}
+             knowledge={selectedChatSpot.knowledge}
+             onClose={() => setSelectedChatSpot(null)}
+             onViewArtifact={handleViewArtifactFromChat}
+          />
+       )}
     </div>
   );
 }

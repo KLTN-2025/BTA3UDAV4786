@@ -31,14 +31,11 @@ export const createPanorama = async (req, res) => {
   }
 };
 
-
-// Lấy danh sách tất cả panoramas
 export const listPanoramas = async (req, res) => {
   const list = await models.Panorama.findAll({ include: ["hotspots"] });
   res.json(list);
 };
 
-// Lấy panorama theo ID
 export const getPanorama = async (req, res) => {
   const pano = await models.Panorama.findByPk(req.params.id, {
     include: [{ model: models.Hotspot, as: "hotspots" }],
@@ -47,7 +44,6 @@ export const getPanorama = async (req, res) => {
   res.json(pano);
 };
 
-// Cập nhật panorama
 export const updatePanorama = async (req, res) => {
   const pano = await models.Panorama.findByPk(req.params.id);
   if (!pano) return res.status(404).json({ error: "Not found" });
@@ -60,7 +56,6 @@ export const updatePanorama = async (req, res) => {
   res.json(pano);
 };
 
-// Xoá panorama
 export const deletePanorama = async (req, res) => {
   const pano = await models.Panorama.findByPk(req.params.id);
   if (!pano) return res.status(404).json({ error: "Not found" });

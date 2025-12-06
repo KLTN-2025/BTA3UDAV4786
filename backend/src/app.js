@@ -9,7 +9,11 @@ import roomsRoutes from "./routes/rooms.routes.js";
 import panoramasRoutes from "./routes/panoramas.routes.js";
 import hotspotsRoutes from "./routes/hotspots.routes.js";
 import quizRoutes from './routes/quiz.routes.js';
+import artifactsRoutes from "./routes/artifacts.routes.js";
 import authRoutes from "./routes/auth.routes.js"
+import usersRoutes from "./routes/users.routes.js";
+import syncRoutes from "./routes/sync.routes.js";
+import timelineRoutes from "./routes/timeline.routes.js";
 import { sequelize } from "./models/index.js";
 import { connectMongo } from "./config/db.mongo.js";
 import "dotenv/config";
@@ -47,6 +51,10 @@ app.use("/api/rooms", roomsRoutes);
 app.use("/api/panoramas", panoramasRoutes);
 app.use("/api/hotspots", hotspotsRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use("/api/artifacts", artifactsRoutes);
+app.use("/api/timeline", timelineRoutes);
+app.use("/api/sync", syncRoutes);
+app.use("/api/users", usersRoutes);
 
 
 export const init = async () => {

@@ -162,7 +162,7 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
     <>
       {textureMain && (
         <Sphere args={[500, 64, 64]} scale={[1, 1, 1]}>
-          <meshBasicMaterial map={textureMain} side={THREE.BackSide} />
+          <meshBasicMaterial map={textureMain} side={THREE.BackSide} depthWrite={false} />
         </Sphere>
       )}
 
@@ -173,13 +173,15 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
             map={textureNext} 
             side={THREE.BackSide} 
             transparent={true} 
-            opacity={0} 
+            opacity={0}
+            depthWrite={false} 
             depthTest={false} 
           />
         </Sphere>
       )}
 
       {hotspots && hotspots.map((spot) => {
+        if (spot.type === 'nav' || !spot.type) {
         const vecXZ = new THREE.Vector3(spot.x, 0, spot.z);
         vecXZ.normalize().multiplyScalar(950); 
         const floorY = -150; 
@@ -246,6 +248,96 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
             </Html> */}
           </group>
         );
+      }
+      if (spot.type === 'info') {
+            const vec = new THREE.Vector3(spot.x, spot.y, spot.z); 
+            vec.normalize().multiplyScalar(450); // Kéo lại gần tường
+
+            return (
+              <group 
+                key={spot.id} 
+                position={[vec.x, vec.y, -vec.z]} 
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    onHotspotClick(spot); 
+                }}
+                onPointerOver={() => document.body.style.cursor = 'help'}
+                onPointerOut={() => document.body.style.cursor = 'auto'}
+              >
+              
+                <mesh 
+                    visible={false}
+                    lookAt={() => new THREE.Vector3(0,0,0)} 
+                >
+                    <planeGeometry args={[60, 60]} /> 
+                    <meshBasicMaterial side={THREE.DoubleSide} />
+                </mesh>
+
+                <mesh renderOrder={5}>
+                   <circleGeometry args={[20, 32]} />
+                   <meshBasicMaterial color="rgba(0,0,0,0.7)" transparent depthTest={false}/>
+                </mesh>
+                <mesh renderOrder={6}>
+                   <ringGeometry args={[20, 23, 32]} />
+                   <meshBasicMaterial color="#FFD700" transparent side={THREE.DoubleSide} depthTest={false} />
+                </mesh>
+
+                <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }}>
+                   <div className="flex flex-col items-center">
+                      <div className="text-2xl drop-shadow-md">ℹ️</div>
+                      <div className="mt-2 bg-black/80 text-[#FFD700] px-2 py-1 rounded text-xs font-bold whitespace-nowrap border border-yellow-600/50">
+                         {spot.label}
+                      </div>
+                   </div>
+                </Html>
+              </group>
+            );
+        }
+
+        if (spot.type === 'chat') {
+        const vec = new THREE.Vector3(spot.x, spot.y, spot.z);
+        vec.normalize().multiplyScalar(450); // Khoảng cách hiển thị
+
+        return (
+          <group 
+            key={spot.id} 
+            position={[vec.x, vec.y, -vec.z]} 
+            onClick={(e) => { 
+                e.stopPropagation(); 
+                onHotspotClick(spot);
+            }}
+            onPointerOver={() => document.body.style.cursor = 'help'}
+            onPointerOut={() => document.body.style.cursor = 'auto'}
+          >
+          
+            <mesh visible={false} lookAt={() => new THREE.Vector3(0,0,0)}>
+                <planeGeometry args={[60, 80]} />
+                <meshBasicMaterial side={THREE.DoubleSide} />
+            </mesh>
+
+        
+            <mesh>
+                <ringGeometry args={[20, 25, 32]} />
+                <meshBasicMaterial color="#9C27B0" transparent opacity={0.6} side={THREE.DoubleSide} />
+            </mesh>
+
+        
+            <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }}>
+                <div className="flex flex-col items-center animate-bounce-slow">
+                  
+                   <div className="text-4xl filter drop-shadow-lg cursor-pointer transform hover:scale-110 transition-transform">
+                      🤖
+                   </div>
+                   <div className="mt-1 bg-purple-900/90 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border border-purple-400 shadow-[0_0_10px_#9C27B0]">
+                      {spot.label}
+                   </div>
+                </div>
+            </Html>
+          </group>
+        );
+    }
+        
+        return null;
       })}
 
       <OrbitControls
@@ -254,6 +346,7 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
         enableRotate={!isTransitioning}
         rotateSpeed={-0.5}
         enableDamping
+        enablePan={false}
       />
     </>
   );

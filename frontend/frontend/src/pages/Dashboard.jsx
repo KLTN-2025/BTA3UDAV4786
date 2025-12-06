@@ -1,8 +1,13 @@
 import { useEffect, useState, useRef } from "react";
+import { confirmDelete, notifySuccess, notifyError } from '../utils/alertHelper';
 import { RoomAPI } from "../api/roomApi";
 import { PanoramaAPI } from "../api/panoramaApi";
 import { HotspotAPI } from "../api/hotspotApi";
 import { QuizAPI } from "../api/quizApi";
+import { ArtifactAPI } from "../api/artifactApi";
+import { TimelineAPI } from "../api/timelineApi";
+import { AdminAPI } from "../api/adminApi";
+import { AIConfigAPI } from "../api/aiConfigApi";
 import * as PANOLENS from "panolens";
 import * as THREE from "three";
 import UserManager from '../components/UserManager';
@@ -11,17 +16,36 @@ import Leaderboard from '../components/Leaderboard';
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("museum");
   const [rooms, setRooms] = useState([]);
+  const [editingRoom, setEditingRoom] = useState(null);
   const [panoramas, setPanoramas] = useState([]);
   const [allPanoramas, setAllPanoramas] = useState([]);
   const [hotspots, setHotspots] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [selectedPanorama, setSelectedPanorama] = useState(null);
+  const [editingArtifact, setEditingArtifact] = useState(null);
+  const [knowledgeList, setKnowledgeList] = useState([]);
+  const [editingKnowledge, setEditingKnowledge] = useState(null);
   const [form, setForm] = useState({
     roomName: "",
     panoTitle: "",
     panoFile: null,
     hotspotLabel: "",
+    hotspotType: "nav",
     toPanoramaId: "",
+    artifactId: "",
+    artifactName: "",
+    artifactDesc: "",
+    artifactFile: null,
+    instruction: "", // Vai trò AI
+    knowledge: ""
+  });
+
+  const [formTimeline, setFormTimeline] = useState({
+      year: "",
+      title: "",
+      description: "",
+      imageFiles: [],
+      order: 0
   });
 
   const [showViewer, setShowViewer] = useState(false);
@@ -32,7 +56,12 @@ export default function Dashboard() {
 
   const [currentPanoData, setCurrentPanoData] = useState(null);
 
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiContent, setAiContent] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const [questions, setQuestions] = useState([]); 
+  const [editingQuestion, setEditingQuestion] = useState(null);
   const [quizForm, setQuizForm] = useState({ 
     question: "",
     optionA: "",
@@ -43,12 +72,16 @@ export default function Dashboard() {
   });
 
   const [editingHotspot, setEditingHotspot] = useState(null);
+  const [artifacts, setArtifacts] = useState([]);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [editingEvent, setEditingEvent] = useState(null);
 
  
   useEffect(() => {
     loadRooms();
     loadQuestions();
     loadAllPanoramas();
+    loadTimeline();
   }, []);
 
  useEffect(() => {
@@ -69,6 +102,21 @@ export default function Dashboard() {
     }
   }, [showViewer, currentPanoData]);
 
+  useEffect(() => {
+    if (activeTab === "ai_brain") {
+      loadKnowledgeList();
+    }
+  }, [activeTab]);
+
+  const loadKnowledgeList = async () => {
+    try {
+      const data = await AIConfigAPI.listKnowledge();
+      setKnowledgeList(data);
+    } catch (e) {
+      console.error("Lỗi load knowledge:", e);
+    }
+  };
+
 
   const loadRooms = async () => setRooms(await RoomAPI.list());
   const loadAllPanoramas = async () => setAllPanoramas(await PanoramaAPI.list());
@@ -78,11 +126,74 @@ export default function Dashboard() {
     setHotspots(await HotspotAPI.getByPanorama(panoId));
 
   const loadQuestions = async () => setQuestions(await QuizAPI.list());
+  const loadTimeline = async () => setTimelineEvents(await TimelineAPI.list());
+
+  const handleSyncArtifacts = async () => {
+    setIsSyncing(true);
+    try {
+        const res = await AdminAPI.syncArtifacts();
+        notifySuccess(`✅ ${res.message} (Đã nạp ${res.details.synced_count} vật phẩm)`);
+    } catch (e) {
+        notifyError("❌ Lỗi đồng bộ: " + e.message);
+    } finally {
+        setIsSyncing(false);
+    }
+  };
+
+  // --- HÀM 2: NẠP KIẾN THỨC TRỰC TIẾP ---
+  const handleSaveKnowledge = async (e) => {
+    e.preventDefault();
+    if(!aiTopic || !aiContent) return notifyError("Nhập đủ thông tin!");
+    
+    try {
+        if (editingKnowledge) {
+            // Sửa
+            await AIConfigAPI.updateKnowledge(editingKnowledge.id, aiTopic, aiContent);
+            notifySuccess("Đã cập nhật kiến thức!");
+            setEditingKnowledge(null);
+        } else {
+            // Thêm mới
+            await AIConfigAPI.addKnowledge(aiTopic, aiContent);
+            notifySuccess("Đã nạp kiến thức mới!");
+        }
+        
+        // Reset form và reload list
+        setAiTopic(""); 
+        setAiContent("");
+        loadKnowledgeList();
+
+    } catch (e) {
+        notifyError("Lỗi: " + e.message);
+    }
+  };
+
+  const handleEditKnowledge = (item) => {
+      setEditingKnowledge(item);
+      setAiTopic(item.topic);
+      setAiContent(item.content);
+  };
+
+  const handleCancelEditKnowledge = () => {
+      setEditingKnowledge(null);
+      setAiTopic("");
+      setAiContent("");
+  };
+
+  const handleDeleteKnowledge = async (id) => {
+      if(!await confirmDelete("Bạn có chắc muốn xóa kiến thức này khỏi bộ não AI?")) return;
+      try {
+          await AIConfigAPI.deleteKnowledge(id);
+          notifySuccess("Đã xóa kiến thức thành công!");
+          loadKnowledgeList();
+      } catch (e) {
+          notifyError("Lỗi xóa: " + e.message);
+      }
+  };
 
 const handleDeleteRoom = async (roomId) => {
-  if (!window.confirm("Bạn có chắc muốn xóa Room này không?")) return;
+  if (!await confirmDelete("Bạn có chắc muốn xóa Room này không?")) return;
   await RoomAPI.delete(roomId);
-  alert("🗑️ Đã xóa Room!");
+  notifySuccess("Đã xóa phòng thành công!");
   loadRooms();
   setSelectedRoom(null);
   setPanoramas([]);
@@ -90,30 +201,61 @@ const handleDeleteRoom = async (roomId) => {
 };
 
 const handleDeletePanorama = async (panoId) => {
-  if (!window.confirm("Xóa panorama này?")) return;
+  if (!await confirmDelete("Xóa panorama này?")) return;
   await PanoramaAPI.delete(panoId);
-  alert("🗑️ Đã xóa Panorama!");
+  notifySuccess("Đã xóa Panorama!");
   if (selectedRoom) loadPanoramas(selectedRoom);
 };
 
 const handleDeleteHotspot = async (hotspotId, panoId) => {
-  if (!window.confirm("Xóa hotspot này?")) return;
-  await HotspotAPI.delete(hotspotId);
-  alert("🗑️ Đã xóa Hotspot!");
-  loadHotspots(panoId);
+  if (!await confirmDelete("Xóa hotspot này?")) return;
+  try {
+    await HotspotAPI.delete(hotspotId);
+    notifySuccess("Đã xóa Hotspot!");
+    
+    const updatedList = await HotspotAPI.getByPanorama(panoId);
+    setHotspots(updatedList);
+    
+  } catch (e) {
+    notifyError("Lỗi xóa: " + e.message);
+  }
 };
 
-  const handleAddRoom = async (e) => {
+  const handleSaveRoom = async (e) => {
     e.preventDefault();
-    if (!form.roomName) return alert("Nhập tên phòng!");
-    await RoomAPI.create({ name: form.roomName });
+    if (!form.roomName) return notifyError("Nhập tên phòng!");
+
+    try {
+      if (editingRoom) {
+      
+        await RoomAPI.update(editingRoom.id, { name: form.roomName });
+        notifySuccess("Đã cập nhật tên phòng!");
+        setEditingRoom(null);
+      } else {
+        await RoomAPI.create({ name: form.roomName });
+        notifySuccess("Đã thêm phòng mới!");
+      }
+
+      setForm({ ...form, roomName: "" }); 
+      loadRooms(); 
+    } catch (error) {
+      notifyError("Lỗi: " + error.message);
+    }
+  };
+
+  const handleEditRoom = (room) => {
+    setEditingRoom(room);
+    setForm({ ...form, roomName: room.name });
+  };
+
+  const handleCancelEditRoom = () => {
+    setEditingRoom(null);
     setForm({ ...form, roomName: "" });
-    loadRooms();
   };
 
   const handleAddPanorama = async (e) => {
   e.preventDefault();
-  if (!selectedRoom) return alert("Chọn phòng trước!");
+  if (!selectedRoom) return notifyError("Chọn phòng trước!");
   
   const fd = new FormData();
   fd.append("roomId", selectedRoom);
@@ -121,12 +263,10 @@ const handleDeleteHotspot = async (hotspotId, panoId) => {
   fd.append("image", form.panoFile);
 
   const newPano = await PanoramaAPI.create(fd);
-  alert("✅ Upload panorama thành công!");
+  notifySuccess("Upload panorama thành công!");
 
   setForm({ ...form, panoTitle: "", panoFile: null });
   loadPanoramas(selectedRoom);
-
-  console.log("📸 Panorama uploaded:", newPano.imageUrl); 
 };
 
 const handleQuizFormChange = (e) => {
@@ -134,7 +274,7 @@ const handleQuizFormChange = (e) => {
     setQuizForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleAddQuestion = async (e) => {
+  const handleSaveQuestion = async (e) => {
     e.preventDefault();
     if (
       !quizForm.question ||
@@ -143,10 +283,10 @@ const handleQuizFormChange = (e) => {
       !quizForm.optionC ||
       !quizForm.optionD
     ) {
-      return alert("Vui lòng nhập đầy đủ câu hỏi và 4 đáp án.");
+      return notifyError("Vui lòng nhập đầy đủ câu hỏi và 4 đáp án.");
     }
 
-    const newQuestion = {
+    const questionPayload = {
       question: quizForm.question,
       options: [
         quizForm.optionA,
@@ -157,9 +297,46 @@ const handleQuizFormChange = (e) => {
       correctAnswer: quizForm.correctAnswer,
     };
 
-    await QuizAPI.create(newQuestion);
-    alert("✅ Thêm câu hỏi thành công!");
-    loadQuestions();
+    try {
+      if (editingQuestion) {
+        await QuizAPI.update(editingQuestion.id, questionPayload);
+        notifySuccess("Đã cập nhật câu hỏi!");
+        setEditingQuestion(null);
+      } else {
+        await QuizAPI.create(questionPayload);
+        notifySuccess("Thêm câu hỏi thành công!");
+      }
+
+     
+      loadQuestions();
+      setQuizForm({
+        question: "",
+        optionA: "",
+        optionB: "",
+        optionC: "",
+        optionD: "",
+        correctAnswer: "A",
+      });
+
+    } catch (error) {
+      notifyError("Lỗi: " + error.message);
+    }
+  };
+
+  const handleEditQuestion = (q) => {
+    setEditingQuestion(q);
+    setQuizForm({
+      question: q.question,
+      optionA: q.options[0],
+      optionB: q.options[1],
+      optionC: q.options[2],
+      optionD: q.options[3],
+      correctAnswer: q.correctAnswer,
+    });
+  };
+
+  const handleCancelEditQuestion = () => {
+    setEditingQuestion(null);
     setQuizForm({
       question: "",
       optionA: "",
@@ -170,19 +347,137 @@ const handleQuizFormChange = (e) => {
     });
   };
 
+  const loadArtifacts = async (roomId) => {
+      if(!roomId) return;
+      const data = await ArtifactAPI.listByRoom(roomId);
+      setArtifacts(data);
+  }
+
+  
+
+  const handleSaveArtifact = async (e) => {
+      e.preventDefault();
+      if(!selectedRoom) return notifyError("Chọn phòng trước!");
+      
+      const fd = new FormData();
+      fd.append("roomId", selectedRoom);
+      fd.append("name", form.artifactName);
+      fd.append("description", form.artifactDesc);
+      
+      if (form.artifactFile) {
+        fd.append("image", form.artifactFile);
+      }
+      
+      try {
+        if (editingArtifact) {
+         
+           await ArtifactAPI.update(editingArtifact.id, fd);
+           notifySuccess("Đã cập nhật vật phẩm!");
+           setEditingArtifact(null);
+        } else {
+           await ArtifactAPI.create(fd);
+           notifySuccess("✅ Đã thêm vật phẩm mới!");
+        }
+
+        setForm({...form, artifactName: "", artifactDesc: "", artifactFile: null});
+        loadArtifacts(selectedRoom);
+
+      } catch (error) {
+        notifyError("Lỗi: " + error.message);
+      }
+  };
+
+  const handleEditArtifact = (artifact) => {
+    setEditingArtifact(artifact);
+    setForm({
+        ...form,
+        artifactName: artifact.name,
+        artifactDesc: artifact.description || "",
+        artifactFile: null
+    });
+  };
+
+  const handleCancelEditArtifact = () => {
+    setEditingArtifact(null);
+    setForm({...form, artifactName: "", artifactDesc: "", artifactFile: null});
+  };
+
+  const handleSaveTimeline = async (e) => {
+    e.preventDefault();
+    
+    const fd = new FormData();
+    fd.append("year", formTimeline.year);
+    fd.append("title", formTimeline.title);
+    fd.append("description", formTimeline.description);
+    fd.append("order", formTimeline.order);
+    
+    if (formTimeline.imageFiles && formTimeline.imageFiles.length > 0) {
+      for (let i = 0; i < formTimeline.imageFiles.length; i++) {
+        fd.append("images", formTimeline.imageFiles[i]);
+      }
+    }
+
+    try {
+      if (editingEvent) {
+        await TimelineAPI.update(editingEvent.id, fd);
+        notifySuccess("Đã cập nhật sự kiện!");
+        setEditingEvent(null); 
+      } else {
+        await TimelineAPI.create(fd);
+        notifySuccess("Đã thêm sự kiện lịch sử!");
+      }
+
+      setFormTimeline({ year: "", title: "", description: "", order: 0, imageFiles: [] });
+      loadTimeline();
+
+    } catch (error) {
+      notifyError("Lỗi: " + error.message);
+    }
+  };
+
+  const handleEditTimeline = (evt) => {
+    setEditingEvent(evt);
+    setFormTimeline({
+      year: evt.year,
+      title: evt.title,
+      description: evt.description || "",
+      order: evt.order || 0,
+      imageFiles: [] 
+    });
+  };
+
+  const handleCancelEditTimeline = () => {
+    setEditingEvent(null);
+    setFormTimeline({ year: "", title: "", description: "", order: 0, imageFiles: [] });
+  };
+
+  const handleSelectRoom = (roomId) => {
+      setSelectedRoom(roomId);
+      loadPanoramas(roomId);
+      loadArtifacts(roomId);
+  };
+
   const handleDeleteQuestion = async (questionId) => {
-    if (!window.confirm("Xóa câu hỏi này?")) return;
+    if (!await confirmDelete("Xóa câu hỏi này?")) return;
     await QuizAPI.delete(questionId);
-    alert("🗑️ Đã xóa câu hỏi!");
+    notifySuccess("Đã xóa câu hỏi!");
     loadQuestions();
+  };
+
+  const handleDeleteTimeline = async (id) => { 
+      if(await confirmDelete("Xóa sự kiện này?")) { 
+          await TimelineAPI.delete(id); 
+          loadTimeline(); 
+      } 
   };
 
 
   // ===== VIEWER =====
   const openViewer = async (pano) => {
     setSelectedPanorama(pano.id);
+    if (selectedRoom && artifacts.length === 0) loadArtifacts(selectedRoom);
     const data = await HotspotAPI.getByPanorama(pano.id);
-
+    setHotspots(data);
     let fixedUrl = pano.imageUrl;
     if (fixedUrl.startsWith("blob:") || fixedUrl.startsWith("/uploads")) {
       fixedUrl = `http://localhost:4000${pano.imageUrl.replace("blob:", "").replace(/^\/+/, "/")}`;
@@ -213,97 +508,95 @@ const initPanoramaViewer = (pano, hotspotData) => {
     panorama.crossOrigin = "anonymous";
     panoObjRef.current = panorama; 
 
-    // === 16 điểm gợi ý đều 360 độ ===
-const suggestionPoints = [];
-const radius = 5000;      // khoảng cách từ tâm
-const height = -500;      // cao thấp của hotspot
-const count = 16;         // số điểm muốn tạo
+    //16 điểm gợi ý đều 360 độ
+  const suggestionPoints = [];
+  const radius = 5000;      // khoảng cách từ tâm
+  const height = -500;      // cao thấp của hotspot
+  const count = 16;         // số điểm muốn tạo
 
-for (let i = 0; i < count; i++) {
-  const angle = (i / count) * Math.PI * 2; // chia đều 360°
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2; // chia đều 360°
 
-  const x = Math.sin(angle) * radius;
-  const z = Math.cos(angle) * radius;
+    const x = Math.sin(angle) * radius;
+    const z = Math.cos(angle) * radius;
 
-  suggestionPoints.push({
-    label: `Điểm ${i + 1}`, 
-    pos: new THREE.Vector3(x, height, z)
-  });
-}
+    suggestionPoints.push({
+      label: `Điểm ${i + 1}`, 
+      pos: new THREE.Vector3(x, height, z)
+    });
+  }
 
 
     
     panorama.addEventListener("load", () => {
       const panoInstance = panorama; 
+      
       hotspotData.forEach((h) => {
-        const spot = new PANOLENS.Infospot(400, PANOLENS.DataImage.Info);
-        spot.position.set(h.x || h.posX, h.y || h.posY, h.z || h.posZ); 
-        spot.addHoverText(h.label);
+        const icon = h.type === 'info' ? PANOLENS.DataImage.Info : PANOLENS.DataImage.Arrow;
+        const spot = new PANOLENS.Infospot(400, icon);
+        spot.position.set(h.x, h.y, h.z); 
+        const prefix = h.type === 'info' ? '[i] ' : '➜ ';
+        spot.addHoverText(prefix + h.label);
         panoInstance.add(spot);
       });
 
       suggestionPoints.forEach((p) => {
-        const suggestionSpot = new PANOLENS.Infospot(
-          300, 
-          PANOLENS.DataImage.Add 
-        );
-        
+        const suggestionSpot = new PANOLENS.Infospot(300, PANOLENS.DataImage.Add);
         suggestionSpot.position.copy(p.pos);
         suggestionSpot.addHoverText(`Chọn vị trí: ${p.label}`);
+        
         suggestionSpot.addEventListener("click", async () => {
           const currentForm = formRef.current;
 
-          if (!currentForm.hotspotLabel || !currentForm.toPanoramaId) {
-            return alert(
-              "⚠️ Vui lòng nhập Label và Chọn panorama đích TRƯỚC KHI click vào điểm gợi ý!"
-            );
+          // Validate
+          if (!currentForm.hotspotLabel) return notifyError("Vui lòng nhập Tên Hotspot!");
+          
+          if (currentForm.hotspotType === 'nav' && !currentForm.toPanoramaId) {
+             return notifyError("Loại 'Đi tiếp' cần chọn Phòng đích!");
+          }
+          if (currentForm.hotspotType === 'info' && !currentForm.artifactId) {
+             return notifyError("Loại 'Vật phẩm' cần chọn Vật phẩm từ danh sách!");
+          }
+          if (currentForm.hotspotType === 'chat' && !currentForm.instruction) {
+              if(!confirmDelete("Bạn chưa nhập vai trò cho AI, sẽ dùng mặc định. Tiếp tục?")) return;
           }
 
           const pos = p.pos;
           
           const newHotspot = {
             fromPanoramaId: pano.id,
-            toPanoramaId: currentForm.toPanoramaId, 
-            label: currentForm.hotspotLabel,       
-            x: parseFloat(pos.x.toFixed(3)), 
-            y: parseFloat(pos.y.toFixed(3)), 
-            z: parseFloat(pos.z.toFixed(3)), 
+            x: parseFloat(pos.x.toFixed(3)),
+            y: parseFloat(pos.y.toFixed(3)),
+            z: parseFloat(pos.z.toFixed(3)),
+            label: currentForm.hotspotLabel,
+            type: currentForm.hotspotType,
+            
+            // Gửi dữ liệu tùy loại
+            toPanoramaId: currentForm.hotspotType === 'nav' ? currentForm.toPanoramaId : null,
+            artifactId: currentForm.hotspotType === 'info' ? currentForm.artifactId : null,
+
+            instruction: currentForm.hotspotType === 'chat' ? currentForm.instruction : "",
+            knowledge: currentForm.hotspotType === 'chat' ? currentForm.knowledge : ""
           };
 
           try {
             await HotspotAPI.create(newHotspot);
+            notifySuccess(`Tạo hotspot "${newHotspot.label}" thành công!`);
 
-            alert(
-              `✅ Tạo hotspot "${newHotspot.label}" tại vị trí "${p.label}" thành công!`
-            );
-
-            loadHotspots(pano.id);
-
-            const newPermSpot = new PANOLENS.Infospot(
-              400,
-              PANOLENS.DataImage.Info 
-            );
-            newPermSpot.position.copy(pos);
-            newPermSpot.addHoverText(newHotspot.label);
-            panoInstance.add(newPermSpot);
-
-            panoInstance.remove(suggestionSpot);
+            const newData = await HotspotAPI.getByPanorama(pano.id);
+            initPanoramaViewer(pano, newData); 
             
-            setForm(prevForm => ({ 
-              ...prevForm, 
-              hotspotLabel: "", 
-              toPanoramaId: "" 
-            }));
+            setForm(prev => ({ ...prev, hotspotLabel: "", toPanoramaId: "", artifactId: "" }));
 
           } catch (error) {
-            console.error(" Không thể tạo hotspot:", error);
-            alert(`❌ Lỗi khi tạo hotspot: ${error.message}`);
+            console.error(error);
+            notifyError(`Lỗi: ${error.message}`);
           }
         }); 
 
         panoInstance.add(suggestionSpot);
       }); 
-    }); 
+    });
     viewer.add(panorama);
   };
 
@@ -313,9 +606,11 @@ for (let i = 0; i < count; i++) {
   return (
     <div
       style={{
-        fontFamily: "Georgia, serif",
         backgroundColor: "#f8f4ec",
-        minHeight: "100vh",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
         color: "#3e2723",
       }}
     >
@@ -326,19 +621,64 @@ for (let i = 0; i < count; i++) {
           padding: "15px 30px",
           fontSize: "22px",
           fontWeight: "bold",
+          flexShrink: 0,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
-        🏛️ DTU Virtual Museum — Quản Trị Dữ Liệu
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+           🏛️ DTU Virtual Museum — Quản Trị Dữ Liệu
+        </div>
+
+        <button
+          onClick={() => window.location.href = '/'} 
+          style={{
+            fontSize: "14px",
+            fontWeight: "500",
+            backgroundColor: "rgba(255, 255, 255, 0.15)",
+            color: "white",
+            border: "1px solid rgba(255, 255, 255, 0.3)",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            transition: "all 0.2s",
+          }}
+          onMouseOver={(e) => {
+             e.target.style.backgroundColor = "white";
+             e.target.style.color = "#4e342e";
+          }}
+          onMouseOut={(e) => {
+             e.target.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+             e.target.style.color = "white";
+          }}
+        >
+          🏠 Trang chủ
+        </button>
       </header>
 
 
-        <nav style={{ padding: "10px 20px", backgroundColor: "#c8bcaf" }}>
+        <nav style={{ padding: "10px 20px", backgroundColor: "#c8bcaf",flexShrink: 0 }}>
         <button
           style={activeTab === "museum" ? tabBtnActive : tabBtn}
           onClick={() => setActiveTab("museum")}
         >
           🏛️ Quản lý Bảo tàng
         </button>
+        <button style={activeTab==="artifacts" ? tabBtnActive : tabBtn} 
+        onClick={()=>setActiveTab("artifacts")}
+        >🏺 Quản lý Vật phẩm
+        </button>
+        <button style={activeTab==="ai_brain" ? tabBtnActive : tabBtn} 
+        onClick={()=>setActiveTab("ai_brain")}
+        >🧠 Quản lý Thông tin
+        </button>
+        <button style={activeTab==="timeline"?tabBtnActive:tabBtn} 
+        onClick={()=>setActiveTab("timeline")}
+        >⏳ Dòng thời gian</button>
         <button
           style={activeTab === "quiz" ? tabBtnActive : tabBtn}
           onClick={() => setActiveTab("quiz")}
@@ -361,61 +701,94 @@ for (let i = 0; i < count; i++) {
 
 
         {activeTab === "museum" && (
-      <main style={{ display: "flex", gap: "20px", padding: "20px" }}>
-        {/* ROOM */}
-        <section style={sectionStyle}>
-          <h3>🗂️ Rooms</h3>
-          <form onSubmit={handleAddRoom}>
-            <input
-              type="text"
-              placeholder="Tên phòng..."
-              value={form.roomName}
-              onChange={(e) => setForm({ ...form, roomName: e.target.value })}
-              style={inputStyle}
-            />
-            <button type="submit" style={btnBrown}>
-              ➕ Thêm
-            </button>
-          </form>
+  <main style={{...scrollableMainStyle, display: "flex", gap: "20px", padding: "20px" }}>
+    {/* ROOM */}
+    <section style={sectionStyle}>
+      <h3>🗂️ Phòng</h3>
+      
+      <form onSubmit={handleSaveRoom}>
+        <input
+          type="text"
+          placeholder="Tên phòng..."
+          value={form.roomName}
+          onChange={(e) => setForm({ ...form, roomName: e.target.value })}
+          style={inputStyle}
+        />
+        
+        {!editingRoom ? (
+          <button type="submit" style={btnBrown}>➕ Thêm phòng</button>
+        ) : (
+          <>
+            <button type="submit" style={{...btnBrown, background: '#FF9800', marginRight: '5px'}}>💾 Lưu</button>
+            <button type="button" onClick={handleCancelEditRoom} style={{...btnBrown, background: '#9E9E9E'}}>❌ Hủy</button>
+          </>
+        )}
+      </form>
 
-          <ul style={{ marginTop: "10px", listStyle: "none", paddingLeft: 0 }}>
-           {rooms.map((r) => (
-  <li
-    key={r.id}
-    style={{
-      ...listItemStyle,
-      background: selectedRoom === r.id ? "#d7ccc8" : "transparent",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-    }}
-  >
-    <span
-      style={{ cursor: "pointer", flex: 1, padding: "4px" }}
-      onClick={() => {
-        setSelectedRoom(r.id);
-        loadPanoramas(r.id);
-      }}
-    >
-      {r.name}
-    </span>
-    <button
-      onClick={() => handleDeleteRoom(r.id)}
-      style={{
-        background: "transparent",
-        color: "red",
-        border: "none",
-        cursor: "pointer",
-        fontSize: "16px",
-      }}
-    >
-      🗑️
-    </button>
-  </li>
-))}
+      {/* DANH SÁCH ROOM */}
+      <ul style={{ marginTop: "10px", listStyle: "none", paddingLeft: 0 }}>
+        {rooms.map((r) => (
+          <li
+            key={r.id}
+            style={{
+              ...listItemStyle,
+              background: selectedRoom === r.id ? "#d7ccc8" : "transparent",
+              border: editingRoom?.id === r.id ? "2px solid #FF9800" : "1px solid #ccc", // Highlight khi đang sửa
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{ cursor: "pointer", flex: 1, padding: "4px" }}
+              onClick={() => {
+                if(editingRoom) return; // Đang sửa thì không cho chọn phòng khác để tránh lỗi form
+                setSelectedRoom(r.id);
+                loadPanoramas(r.id);
+                loadArtifacts(r.id);
+              }}
+            >
+              {r.name}
+            </span>
+            
+            <div style={{display: 'flex', gap: '5px'}}>
+              <button
+                onClick={() => handleEditRoom(r)}
+                disabled={!!editingRoom} // Disable các nút sửa khác khi đang sửa 1 cái
+                style={{
+                  background: "transparent",
+                  color: "#1976D2",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  opacity: editingRoom ? 0.3 : 1
+                }}
+                title="Sửa tên phòng"
+              >
+                ✏️
+              </button>
 
-          </ul>
-        </section>
+            
+              <button
+                onClick={() => handleDeleteRoom(r.id)}
+                disabled={!!editingRoom}
+                style={{
+                  background: "transparent",
+                  color: "red",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  opacity: editingRoom ? 0.3 : 1
+                }}
+                title="Xóa phòng"
+              >
+                🗑️
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
 
       
        {/* PANORAMA */}
@@ -462,7 +835,7 @@ for (let i = 0; i < count; i++) {
         }}
         disabled={!selectedRoom}
       >
-        🪶 Upload
+        🪶 Tải lên
       </button>
     </form>
   )}
@@ -498,268 +871,653 @@ for (let i = 0; i < count; i++) {
 
 
         {/* HOTSPOTS */}
-        <section style={sectionStyle}>
-          <h3>⭕ Hotspots</h3>
-          <div style={{ marginBottom: "8px" }}>
-            <input
-              type="text"
-              placeholder="Label hotspot..."
-              value={form.hotspotLabel}
-              onChange={(e) =>
-                setForm({ ...form, hotspotLabel: e.target.value })
-              }
-              style={inputStyle}
-            />
-            <select
-              value={form.toPanoramaId}
-              onChange={(e) =>
-                setForm({ ...form, toPanoramaId: e.target.value })
-              }
-              style={inputStyle}
-            >
-              <option value="">→ Chọn đích</option>
-              {panoramas
-          .filter((p) => p.id !== selectedPanorama) // Lọc bỏ pano hiện tại
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.title}
-            </option>
-          ))}
-            </select>
-          </div>
+<section style={sectionStyle}>
+  <h3>⭕ Danh sách Hotspots</h3>
 
-          <table style={tableStyle}>
+  {!selectedPanorama ? (
+    <div style={noticeBoxStyle}>
+      👈 Chọn một Panorama bên trái để xem danh sách Hotspot.
+    </div>
+  ) : (
+    <>
+      <p style={{ marginBottom: '15px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+        Đang xem: <strong>{panoramas.find(p => p.id === selectedPanorama)?.title}</strong>
+      </p>
+
+      <table style={tableStyle}>
         <thead>
           <tr style={{ background: "#efebe9" }}>
-            <th style={{ width: "40%" }}>Label</th>
-            <th style={{ width: "30%" }}>To</th>
-            <th style={{ width: "20%" }}>Pos</th>
+            <th style={{ width: "30%" }}>Tên điểm</th>
+            <th style={{ width: "20%" }}>Loại</th>
+            <th style={{ width: "40%" }}>Liên kết / Vật phẩm</th>
             <th style={{ width: "10%" }}>Xóa</th>
           </tr>
         </thead>
         <tbody>
-          {hotspots.map((h) => (
-            <tr key={h.id}>
-              <td>{h.label}</td>
-              <td>{h.toPanoramaId?.slice(0, 6)}...</td>
-              <td>
-                {/* Đọc từ x, y, z */}
-                {h.x}, {h.y}, {h.z}
+          {hotspots.length === 0 ? (
+            <tr>
+              <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#999', fontStyle: 'italic' }}>
+                Chưa có hotspot nào trong ảnh này.
               </td>
-              <td style={{ textAlign: "center" }}>
-                <button
-                  onClick={() =>
-                    handleDeleteHotspot(h.id, h.fromPanoramaId)
-                  }
-                  style={deleteBtnStyle} 
-                  title={`Xóa hotspot "${h.label}"`}
-                >
-                  🗑️
-                </button>
+            </tr>
+          ) : (
+            hotspots.map((h) => (
+              <tr key={h.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ fontWeight: '500' }}>{h.label}</td>
+                {/* Loại Hotspot */}
+                <td style={{ textAlign: 'center' }}>
+                  {h.type === 'nav' && <span style={{ color: 'green', fontWeight: 'bold' }}>➜</span>}
+                  {h.type === 'info' && <span style={{ color: 'blue', fontWeight: 'bold' }}>ℹ️</span>}
+                  {h.type === 'chat' && <span style={{ color: 'purple', fontWeight: 'bold' }}>🤖</span>}
+                </td>
+
+                {/* Chi tiết liên kết */}
+                <td>
+                  {h.type === 'nav' && (
+                    <span style={{ fontSize: '13px', color: '#388E3C' }}>
+                      Đến: {allPanoramas.find(p => p.id === h.toPanoramaId)?.title || 'Unknown'}
+                    </span>
+                  )}
+                  {h.type === 'info' && (
+                    <span style={{ fontSize: '13px', color: '#1976D2' }}>
+                      VP: {artifacts.find(a => a.id === h.artifactId)?.name || 'Unknown'}
+                    </span>
+                  )}
+                  {h.type === 'chat' && (
+                    <span style={{ fontSize: '13px', color: '#7B1FA2' }}>AI Chatbot</span>
+                  )}
+                </td>
+
+                {/* Nút Xóa */}
+                <td style={{ textAlign: "center" }}>
+                  <button
+                    onClick={() => handleDeleteHotspot(h.id, h.fromPanoramaId)}
+                    style={deleteBtnStyle}
+                    title="Xóa Hotspot này"
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </>
+  )}
+</section>
+      </main>
+        )}
+
+        {/* ARTIFACTS */}
+        {activeTab === "artifacts" && (
+    <main style={{...scrollableMainStyle, padding: "20px" }}>
+        {!selectedRoom ? <p>⚠️ Vui lòng quay lại tab "Bảo tàng" và chọn một Phòng trước.</p> : (
+            <div style={{display: 'flex', gap: '20px'}}>
+                
+        
+                <section style={sectionStyle}>
+                    <h3>
+                        {editingArtifact ? `✏️ Sửa vật phẩm: ${editingArtifact.name}` : `➕ Thêm Vật phẩm vào: ${rooms.find(r=>r.id===selectedRoom)?.name}`}
+                    </h3>
+                    
+                    <form onSubmit={handleSaveArtifact}>
+                        <input type="text" placeholder="Tên vật phẩm (VD: Trống Đồng)" 
+                            style={{...inputStyle, width: '100%', marginBottom: '10px'}}
+                            value={form.artifactName}
+                            onChange={e => setForm({...form, artifactName: e.target.value})}
+                        />
+                        <textarea rows="4" placeholder="Mô tả chi tiết / Lịch sử..."
+                            style={{...inputStyle, width: '100%', marginBottom: '10px'}}
+                            value={form.artifactDesc}
+                            onChange={e => setForm({...form, artifactDesc: e.target.value})}
+                        />
+                        <div style={{marginBottom: '10px'}}>
+                            <label>Ảnh cận cảnh (2D): </label>
+                            <input type="file" onChange={e => setForm({...form, artifactFile: e.target.files[0]})} />
+                            {editingArtifact && <p style={{fontSize: '11px', color: '#666', fontStyle:'italic'}}>Note: Không chọn ảnh nếu muốn giữ ảnh cũ.</p>}
+                        </div>
+
+                        {/* Nút bấm thay đổi tùy trạng thái */}
+                        {!editingArtifact ? (
+                             <button type="submit" style={btnBrown}>➕ Thêm Vật phẩm</button>
+                        ) : (
+                            <div style={{display: 'flex', gap: '10px'}}>
+                                <button type="submit" style={{...btnBrown, background: '#FF9800'}}>💾 Cập nhật</button>
+                                <button type="button" onClick={handleCancelEditArtifact} style={{...btnBrown, background: '#757575'}}>❌ Hủy</button>
+                            </div>
+                        )}
+                    </form>
+                </section>
+
+                {/* --- DANH SÁCH VẬT PHẨM --- */}
+                <section style={{...sectionStyle, flex: 2}}>
+                    <h3>Danh sách vật phẩm ({artifacts.length})</h3>
+                    <div style={gridStyle}>
+                        {artifacts.map(a => (
+                            <div key={a.id} style={{
+                                ...cardStyle,
+                                border: editingArtifact?.id === a.id ? '2px solid #FF9800' : '1px solid #ccc' // Highlight khi đang sửa
+                            }}>
+                                <img src={a.imageUrl} style={{width: '100%', height: '150px', objectFit: 'contain'}} />
+                                <strong>{a.name}</strong>
+                                <p style={{fontSize: '12px', color: '#666'}}>{a.description?.slice(0, 50)}...</p>
+                                
+                                <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
+                                    <button 
+                                        onClick={() => handleEditArtifact(a)}
+                                        disabled={!!editingArtifact} // Disable các nút khác khi đang sửa
+                                        style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}
+                                    >
+                                        ✏️
+                                    </button>
+
+                                    <button onClick={async () => {
+                                        if(editingArtifact) return notifyError("Vui lòng hoàn tất chỉnh sửa trước khi xóa.");
+                                        if(await confirmDelete('Xóa vật phẩm này?')) {
+                                            await ArtifactAPI.delete(a.id);
+                                            loadArtifacts(selectedRoom);
+                                        }
+                                    }} style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}>
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                {/* --- Đồng bộ --- */}
+                <div style={{ marginTop: 20, padding: 15, background: '#f5f5f5', border: '1px dashed #999', alignSelf: 'flex-start' }}>
+                    <h4>🔄 Đồng bộ dữ liệu sang Chatbot</h4>
+                    <p style={{fontSize: '13px'}}>Bấm nút này để gửi toàn bộ dữ liệu vật phẩm hiện tại sang Python để AI học.</p>
+                    <button 
+                        onClick={handleSyncArtifacts} 
+                        disabled={isSyncing}
+                        style={{ background: '#4CAF50', color: 'white', padding: '10px 20px', border: 'none', cursor: 'pointer', width: '100%' }}
+                    >
+                        {isSyncing ? "Đang đồng bộ..." : "Bắt đầu Đồng bộ ngay"}
+                    </button>
+                </div>
+            </div>
+        )}
+    </main>
+)}
+
+         {activeTab === "ai_brain" && (
+  <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px", alignItems: "flex-start" }}>
+    
+    <section style={{ ...sectionStyle, flex: 1 }}>
+      <h3>{editingKnowledge ? "✏️ Chỉnh sửa Kiến thức" : "🧠 Nạp Kiến thức chung"}</h3>
+      
+      <div style={{ background: '#fff3e0', padding: '10px', borderRadius: '4px', marginBottom: '15px', fontSize: '13px', color: '#e65100', border: '1px solid #ffe0b2' }}>
+        ℹ️ <strong>Lưu ý:</strong> Đây là kiến thức nền tảng cho AI (Lịch sử trường, tiểu sử nhân vật...). 
+        Sau khi Lưu/Xóa, AI sẽ tự động học lại dữ liệu mới.
+      </div>
+
+      <form onSubmit={handleSaveKnowledge} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <div>
+          <label style={{fontWeight: 'bold', display: 'block', marginBottom: '5px'}}>Chủ đề:</label>
+          <input
+            type="text"
+            placeholder="VD: Lịch sử thành lập trường ĐH Duy Tân..."
+            value={aiTopic}
+            onChange={(e) => setAiTopic(e.target.value)}
+            style={{ ...inputStyle, width: '100%' }}
+          />
+        </div>
+        
+        <div>
+          <label style={{fontWeight: 'bold', display: 'block', marginBottom: '5px'}}>Nội dung chi tiết:</label>
+          <textarea
+            rows="8"
+            placeholder="Nhập văn bản chi tiết để AI học thuộc..."
+            value={aiContent}
+            onChange={(e) => setAiContent(e.target.value)}
+            style={{ ...inputStyle, width: '100%', fontFamily: 'inherit' }}
+          />
+        </div>
+
+        {!editingKnowledge ? (
+            <button type="submit" style={btnBrown}>
+              ➕ Nạp vào bộ nhớ AI
+            </button>
+        ) : (
+            <div style={{display: 'flex', gap: '10px'}}>
+                <button type="submit" style={{...btnBrown, background: '#FF9800'}}>💾 Cập nhật</button>
+                <button type="button" onClick={handleCancelEditKnowledge} style={{...btnBrown, background: '#757575'}}>❌ Hủy</button>
+            </div>
+        )}
+      </form>
+    </section>
+
+    {/* CỘT 2: DANH SÁCH KIẾN THỨC ĐÃ CÓ */}
+    <section style={{ ...sectionStyle, flex: 1.5 }}>
+      <h3>📚 Danh sách Kiến thức ({knowledgeList.length})</h3>
+      
+      <div style={{ marginTop: '10px', maxHeight: '70vh', overflowY: 'auto' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ background: "#efebe9" }}>
+              <th style={{width: '30%'}}>Chủ đề</th>
+              <th style={{width: '55%'}}>Nội dung trích dẫn</th>
+              <th style={{width: '15%'}}>Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+             {knowledgeList.length === 0 ? (
+                 <tr>
+                    <td colSpan="3" style={{textAlign: 'center', padding: '20px', color: '#999', fontStyle: 'italic'}}>
+                       Chưa có kiến thức nào. Hãy thêm ở cột bên trái.
+                    </td>
+                 </tr>
+             ) : (
+                 knowledgeList.map((item) => (
+                     <tr key={item.id} style={{borderBottom: '1px solid #eee'}}>
+                         <td style={{fontWeight: '500', verticalAlign: 'top'}}>{item.topic}</td>
+                         <td style={{fontSize: '13px', color: '#555', verticalAlign: 'top'}}>
+                             {item.content.length > 100 ? item.content.substring(0, 100) + "..." : item.content}
+                         </td>
+                         <td style={{textAlign: 'center', verticalAlign: 'top'}}>
+                             <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                                 <button 
+                                    onClick={() => handleEditKnowledge(item)}
+                                    disabled={!!editingKnowledge}
+                                    style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}
+                                 >
+                                     ✏️
+                                 </button>
+                                 <button 
+                                    onClick={() => handleDeleteKnowledge(item.id)}
+                                    disabled={!!editingKnowledge}
+                                    style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}
+                                 >
+                                     🗑️
+                                 </button>
+                             </div>
+                         </td>
+                     </tr>
+                 ))
+             )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+)}
+
+        {activeTab === "timeline" && (
+    <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px" }}>
+        
+        <section style={{...sectionStyle, flex: 1}}>
+            <h3>{editingEvent ? `✏️ Sửa sự kiện: ${editingEvent.year}` : "⏳ Thêm Sự Kiện Lịch Sử"}</h3>
+            
+            <form onSubmit={handleSaveTimeline}>
+                <div style={{marginBottom: '10px'}}>
+                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Năm / Giai đoạn:</label>
+                   <input type="text" placeholder="VD: 1994, 2010-2015" style={{...inputStyle, width: '100%'}} 
+                       value={formTimeline.year} onChange={e => setFormTimeline({...formTimeline, year: e.target.value})} 
+                   />
+                </div>
+
+                <div style={{marginBottom: '10px'}}>
+                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Tiêu đề:</label>
+                   <input type="text" placeholder="Tiêu đề sự kiện" style={{...inputStyle, width: '100%'}} 
+                       value={formTimeline.title} onChange={e => setFormTimeline({...formTimeline, title: e.target.value})} 
+                   />
+                </div>
+
+                <div style={{marginBottom: '10px'}}>
+                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Thứ tự hiển thị:</label>
+                   <input type="number" placeholder="0" style={{...inputStyle, width: '100%'}} 
+                       value={formTimeline.order} onChange={e => setFormTimeline({...formTimeline, order: e.target.value})} 
+                   />
+                </div>
+
+                <div style={{marginBottom: '10px'}}>
+                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Mô tả:</label>
+                   <textarea rows="4" placeholder="Mô tả chi tiết sự kiện..." style={{...inputStyle, width: '100%'}} 
+                       value={formTimeline.description} onChange={e => setFormTimeline({...formTimeline, description: e.target.value})} 
+                   />
+                </div>
+
+                <div style={{marginBottom: '10px'}}>
+                    <label style={{fontWeight:'bold', fontSize:'12px'}}>Ảnh minh họa (Chọn nhiều): </label>
+                    <input 
+                        type="file" 
+                        multiple
+                        onChange={e => setFormTimeline({...formTimeline, imageFiles: e.target.files})} 
+                    />
+                    {editingEvent && <p style={{fontSize: '11px', color: '#666', fontStyle:'italic', marginTop:'5px'}}>Lưu ý: Nếu chọn ảnh mới, toàn bộ ảnh cũ của sự kiện này sẽ bị thay thế.</p>}
+                </div>
+
+                {!editingEvent ? (
+                    <button type="submit" style={btnBrown}>➕ Thêm Sự Kiện</button>
+                ) : (
+                    <div style={{display: 'flex', gap: '10px'}}>
+                        <button type="submit" style={{...btnBrown, background: '#FF9800'}}>💾 Cập nhật</button>
+                        <button type="button" onClick={handleCancelEditTimeline} style={{...btnBrown, background: '#757575'}}>❌ Hủy</button>
+                    </div>
+                )}
+            </form>
+        </section>
+
+        {/* DANH SÁCH SỰ KIỆN */}
+        <section style={{...sectionStyle, flex: 2}}>
+            <h3>Dòng thời gian ({timelineEvents.length})</h3>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                {timelineEvents.map(evt => (
+                    <div key={evt.id} style={{
+                        ...cardStyle, 
+                        display: 'flex', 
+                        gap: '15px', 
+                        alignItems: 'center',
+                        border: editingEvent?.id === evt.id ? '2px solid #FF9800' : '1px solid #ccc',
+                        background: editingEvent?.id === evt.id ? '#fff3e0' : '#fff'
+                    }}>
+                        {/* Hiển thị ảnh đầu tiên làm thumbnail */}
+                        {evt.images && evt.images.length > 0 && (
+                            <div style={{position: 'relative'}}>
+                                <img 
+                                    src={evt.images[0].startsWith('http') ? evt.images[0] : `http://localhost:4000${evt.images[0].startsWith('/')?'':'/'}${evt.images[0]}`} 
+                                    style={{width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px'}} 
+                                />
+                                {evt.images.length > 1 && (
+                                    <span style={{position:'absolute', bottom:0, right:0, background:'rgba(0,0,0,0.6)', color:'white', fontSize:'10px', padding:'2px 4px', borderRadius:'2px'}}>+{evt.images.length-1}</span>
+                                )}
+                            </div>
+                        )}
+                        
+                        <div style={{flex: 1}}>
+                            <div style={{fontWeight: 'bold', color: '#d4b76a', fontSize: '1.1em'}}>
+                                {evt.year} <span style={{fontSize: '0.8em', color: '#999', fontWeight: 'normal'}}>(Thứ tự: {evt.order})</span>
+                            </div>
+                            <div style={{fontWeight: 'bold', fontSize: '1.1em'}}>{evt.title}</div>
+                            <div style={{fontSize: '13px', color: '#555', marginTop: '4px'}}>
+                                {evt.description?.length > 100 ? evt.description.slice(0, 100) + '...' : evt.description}
+                            </div>
+                        </div>
+
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                            <button 
+                                onClick={() => handleEditTimeline(evt)} 
+                                disabled={!!editingEvent}
+                                style={{background: 'white', cursor: 'pointer', padding: '8px', fontSize:'16px'}}
+                            >
+                                ✏️
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if(editingEvent) return notifyError("Hoàn tất sửa trước khi xóa.");
+                                    handleDeleteTimeline(evt.id);
+                                }} 
+                                style={{background: 'white', cursor: 'pointer', padding: '8px', fontSize:'16px'}}
+                            >
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {timelineEvents.length === 0 && <p style={{color: '#999', fontStyle: 'italic', textAlign:'center', marginTop:'20px'}}>Chưa có sự kiện nào.</p>}
+            </div>
+        </section>
+    </main>
+)}
+
+        {activeTab === "quiz" && (
+  <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px" }}>
+    <section style={{ ...sectionStyle, flex: 1 }}>
+      <h3>{editingQuestion ? "✏️ Chỉnh sửa câu hỏi" : "📝 Thêm câu hỏi mới"}</h3>
+      
+      <form onSubmit={handleSaveQuestion} style={quizFormStyle}>
+        <label style={{fontWeight:'bold'}}>Nội dung câu hỏi:</label>
+        <textarea
+          name="question"
+          rows="3"
+          placeholder="Nhập nội dung câu hỏi..."
+          value={quizForm.question}
+          onChange={handleQuizFormChange}
+          style={quizInput}
+        />
+
+        <label style={{fontWeight:'bold', marginTop:'10px'}}>Các phương án:</label>
+        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
+            <span style={{fontWeight:'bold', width:'20px'}}>A.</span>
+            <input name="optionA" type="text" placeholder="Đáp án A" value={quizForm.optionA} onChange={handleQuizFormChange} style={quizInput} />
+        </div>
+        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
+            <span style={{fontWeight:'bold', width:'20px'}}>B.</span>
+            <input name="optionB" type="text" placeholder="Đáp án B" value={quizForm.optionB} onChange={handleQuizFormChange} style={quizInput} />
+        </div>
+        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
+            <span style={{fontWeight:'bold', width:'20px'}}>C.</span>
+            <input name="optionC" type="text" placeholder="Đáp án C" value={quizForm.optionC} onChange={handleQuizFormChange} style={quizInput} />
+        </div>
+        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
+            <span style={{fontWeight:'bold', width:'20px'}}>D.</span>
+            <input name="optionD" type="text" placeholder="Đáp án D" value={quizForm.optionD} onChange={handleQuizFormChange} style={quizInput} />
+        </div>
+
+        <label style={{fontWeight:'bold', marginTop:'10px'}}>Đáp án đúng:</label>
+        <select
+          name="correctAnswer"
+          value={quizForm.correctAnswer}
+          onChange={handleQuizFormChange}
+          style={{...quizSelect, width: '100%', padding: '10px'}}
+        >
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
+
+        {!editingQuestion ? (
+            <button type="submit" style={{...btnBrown, marginTop: '15px'}}>➕ Thêm câu hỏi</button>
+        ) : (
+            <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                <button type="submit" style={{...btnBrown, background: '#FF9800', flex: 1}}>💾 Cập nhật</button>
+                <button type="button" onClick={handleCancelEditQuestion} style={{...btnBrown, background: '#757575', flex: 1}}>❌ Hủy</button>
+            </div>
+        )}
+      </form>
+    </section>
+
+    {/* DANH SÁCH CÂU HỎI */}
+    <section style={{ ...sectionStyle, flex: 2 }}>
+      <h3>📚 Danh sách câu hỏi ({questions.length})</h3>
+      <div style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+      <table style={{ ...tableStyle, fontSize: "14px" }}>
+        <thead>
+          <tr style={{ background: "#efebe9" }}>
+            <th style={{width: '40%'}}>Câu hỏi</th>
+            <th style={{width: '35%'}}>Các đáp án</th>
+            <th style={{width: '10%'}}>Đúng</th>
+            <th style={{width: '15%'}}>Hành động</th>
+          </tr>
+        </thead>
+        <tbody>
+          {questions.map((q) => (
+            <tr key={q.id} style={{borderBottom: '1px solid #eee', background: editingQuestion?.id === q.id ? '#fff3e0' : 'transparent'}}>
+              <td style={{fontWeight: '500'}}>{q.question}</td>
+              <td>
+                <ul style={{margin: 0, paddingLeft: '20px', listStyleType: 'none'}}>
+                  {q.options.map((opt, index) => (
+                    <li key={index} style={{
+                        color: ['A','B','C','D'][index] === q.correctAnswer ? '#2E7D32' : '#000',
+                        fontWeight: ['A','B','C','D'][index] === q.correctAnswer ? 'bold' : 'normal'
+                    }}>
+                      <span style={{fontWeight:'bold'}}>{['A','B','C','D'][index]}.</span> {opt}
+                    </li>
+                  ))}
+                </ul>
+              </td>
+              <td style={{textAlign: 'center', fontWeight: 'bold', color: '#d84315', fontSize: '16px'}}>{q.correctAnswer}</td>
+              <td style={{textAlign: 'center'}}>
+                <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                    <button 
+                        onClick={() => handleEditQuestion(q)}
+                        disabled={!!editingQuestion}
+                        style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}
+                    >
+                        ✏️
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if(editingQuestion) return notifyError("Hoàn tất sửa trước khi xóa.");
+                            handleDeleteQuestion(q.id);
+                        }} 
+                        style={{...btnBrown, background: 'transparent', padding: '4px', fontSize: '16px'}}
+                    >
+                        🗑️
+                    </button>
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-        </section>
-      </main>
-        )}
+      </div>
+    </section>
+  </main>
+)}
 
-        {activeTab === "quiz" && (
-        <main style={{ padding: "20px", display: "flex", gap: "20px" }}>
-          {/* FORM THÊM CÂU HỎI */}
-          <section style={{ ...sectionStyle, flex: 1 }}>
-            <h3>📝 Thêm câu hỏi mới</h3>
-            <form onSubmit={handleAddQuestion} style={quizFormStyle}>
-              <label>Câu hỏi:</label>
-              <textarea
-                name="question"
-                rows="3"
-                placeholder="Nhập nội dung câu hỏi..."
-                value={quizForm.question}
-                onChange={handleQuizFormChange}
-                style={quizInput}
-              />
-
-              <label>Đáp án A:</label>
-              <input
-                name="optionA"
-                type="text"
-                placeholder="Nội dung đáp án A"
-                value={quizForm.optionA}
-                onChange={handleQuizFormChange}
-                style={quizInput}
-              />
-
-              <label>Đáp án B:</label>
-              <input
-                name="optionB"
-                type="text"
-                placeholder="Nội dung đáp án B"
-                value={quizForm.optionB}
-                onChange={handleQuizFormChange}
-                style={quizInput}
-              />
-
-              <label>Đáp án C:</label>
-              <input
-                name="optionC"
-                type="text"
-                placeholder="Nội dung đáp án C"
-                value={quizForm.optionC}
-                onChange={handleQuizFormChange}
-                style={quizInput}
-              />
-
-              <label>Đáp án D:</label>
-              <input
-                name="optionD"
-                type="text"
-                placeholder="Nội dung đáp án D"
-                value={quizForm.optionD}
-                onChange={handleQuizFormChange}
-                style={quizInput}
-              />
-
-              <label>Đáp án đúng:</label>
-              <select
-                name="correctAnswer"
-                value={quizForm.correctAnswer}
-                onChange={handleQuizFormChange}
-                style={quizSelect}
-              >
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-              </select>
-
-              <button type="submit" style={btnBrown}>
-                ➕ Thêm câu hỏi
-              </button>
-            </form>
-          </section>
-
-          {/* DANH SÁCH CÂU HỎI */}
-          <section style={{ ...sectionStyle, flex: 2 }}>
-            <h3>📚 Danh sách câu hỏi</h3>
-            <table style={{ ...tableStyle, fontSize: "14px" }}>
-              <thead>
-                <tr style={{ background: "#efebe9" }}>
-                  <th style={{width: '40%'}}>Câu hỏi</th>
-                  <th style={{width: '40%'}}>Các đáp án</th>
-                  <th style={{width: '10%'}}>Đúng</th>
-                  <th style={{width: '10%'}}>Xóa</th>
-                </tr>
-              </thead>
-              <tbody>
-                {questions.map((q) => (
-                  <tr key={q.id}>
-                    <td>{q.question}</td>
-                    <td>
-                      <ul style={{margin: 0, paddingLeft: '20px'}}>
-                        {q.options.map((opt, index) => (
-                          <li key={index} style={{fontWeight: ['A','B','C','D'][index] === q.correctAnswer ? 'bold' : 'normal'}}>
-                            {opt}
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td style={{textAlign: 'center', fontWeight: 'bold', color: '#4e342e'}}>{q.correctAnswer}</td>
-                    <td style={{textAlign: 'center'}}>
-                      <button onClick={() => handleDeleteQuestion(q.id)} style={deleteBtnStyle}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        </main>
+      {activeTab === "users" && (
+        <div style={scrollableWrapper}>
+            <UserManager />
+        </div>
+      )}
+      {activeTab === "leaderboard" && (
+        <div style={scrollableWrapper}>
+            <Leaderboard />
+        </div>
       )}
 
-      {activeTab === "users" && <UserManager />}
-      {activeTab === "leaderboard" && <Leaderboard />}
-
      {showViewer && (
-  <div style={viewerModal}>
-    <div ref={viewerContainerRef} style={viewerBox}></div>
+        <div style={viewerModal}>
+          <div ref={viewerContainerRef} style={viewerBox}></div>
 
-    {/*  Form nhập Hotspot ngay trong Viewer */}
-    <div
-      style={{
-        position: "absolute",
-        right: "20px",
-        bottom: "20px",
-        background: "rgba(255,255,255,0.95)",
-        padding: "10px 15px",
-        borderRadius: "8px",
-        boxShadow: "0 0 10px rgba(0,0,0,0.3)",
-        width: "260px",
-      }}
-    >
-      <h4 style={{ marginTop: 0, color: "#4e342e", fontSize: "14px" }}>
-        ➕ Thêm Hotspot
-      </h4>
-      <input
-        type="text"
-        placeholder="Label hotspot..."
-        value={form.hotspotLabel}
-        onChange={(e) =>
-          setForm({ ...form, hotspotLabel: e.target.value })
-        }
-        style={{
-          width: "100%",
-          marginBottom: "5px",
-          padding: "6px",
-          border: "1px solid #ccc",
-          borderRadius: "4px",
-        }}
-      />
-      <select
-        value={form.toPanoramaId}
-        onChange={(e) =>
-          setForm({ ...form, toPanoramaId: e.target.value })
-        }
-        style={{
-          width: "100%",
-          padding: "6px",
-          border: "1px solid #ccc",
-          borderRadius: "4px",
-          marginBottom: "5px",
-        }}
-      >
-        <option value="">→ Chọn panorama đích</option>
-        {allPanoramas.filter((p) => p.id !== selectedPanorama)
-        .map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.title}
-          </option>
-        ))}
-      </select>
-      <p
-        style={{
-          fontSize: "12px",
-          color: "#555",
-          marginTop: "5px",
-          lineHeight: "1.4em",
-        }}
-      >
-        👉 Sau khi nhập Label và chọn đích, click vào một trong các điểm 
-        gợi ý ! trong ảnh để đặt hotspot.
-      </p>
-    </div>
+          <div style={{
+              position: "absolute", right: "20px", bottom: "20px",
+              background: "rgba(255,255,255,0.95)", padding: "15px",
+              borderRadius: "8px", boxShadow: "0 0 15px rgba(0,0,0,0.3)", width: "280px",
+              maxHeight: "80vh", overflowY: "auto"
+          }}>
+            <h4 style={{ marginTop: 0, color: "#4e342e", fontSize: "16px", borderBottom: "1px solid #ccc", paddingBottom: "5px" }}>
+              ➕ Thêm Hotspot Mới
+            </h4>
+            
+            <div style={{ marginBottom: "10px", display: "flex", gap: "10px", flexDirection: "column" }}>
+              <div style={{display: 'flex', gap: '15px'}}>
+                <label style={{ cursor: "pointer", fontWeight: form.hotspotType === 'nav' ? 'bold' : 'normal' }}>
+                    <input 
+                        type="radio" name="htype" value="nav" 
+                        checked={form.hotspotType === 'nav'} 
+                        onChange={() => setForm({...form, 
+                          hotspotType: 'nav',
+                          artifactId: "",
+                        hotspotLabel: ""})}
+                    /> Đi tiếp ➜
+                </label>
+                <label style={{ cursor: "pointer", fontWeight: form.hotspotType === 'info' ? 'bold' : 'normal' }}>
+                    <input 
+                        type="radio" name="htype" value="info" 
+                        checked={form.hotspotType === 'info'}
+                        onChange={() => setForm({...form, hotspotType: 'info'})}
+                    /> Vật phẩm ℹ️
+                </label>
+                </div>
+                <label style={{fontWeight: 'bold', color: '#673AB7'}}>
+                  <input type="radio" name="htype" value="chat" checked={form.hotspotType === 'chat'} onChange={() => setForm({...form, hotspotType: 'chat'})} /> 
+                  🤖 Hướng dẫn viên AI
+            </label>
+            </div>
+            
+            <input
+              type="text"
+              placeholder={
+                form.hotspotType === 'nav' 
+                  ? "Nhãn (VD: Vào Bếp)" 
+                  : form.hotspotType === 'chat'
+                    ? "Tên Chatbot (VD: Hướng dẫn viên AI)"
+                    : "Tên vật phẩm (VD: Trống Đồng)"
+              }
+              value={form.hotspotLabel}
+              onChange={(e) => setForm({ ...form, hotspotLabel: e.target.value })}
+              style={{ ...inputStyle, width: "100%", marginBottom: "8px" }}
+            />
 
-    <button 
-      onClick={() => {
-        setShowViewer(false);
-        setCurrentPanoData(null); 
-      }} 
-      style={btnClose}
-    >
-      ✖️ Đóng Viewer
-    </button>
-  </div>
-)}
+            {form.hotspotType === 'nav' && (
+                <select
+                  value={form.toPanoramaId}
+                  onChange={(e) => setForm({ ...form, toPanoramaId: e.target.value })}
+                  style={{ ...inputStyle, width: "100%", marginBottom: "8px" }}
+                >
+                  <option value="">→ Chọn panorama đích</option>
+                  {allPanoramas
+                    .filter((p) => p.id !== selectedPanorama)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                </select>
+            )}
+
+          
+                    {form.hotspotType === 'info' && (
+                        <div style={{marginBottom: '10px'}}>
+                            <label style={{fontSize: '12px', fontWeight: 'bold'}}>Chọn vật phẩm gắn vào:</label>
+                            <select 
+                                value={form.artifactId}
+                                onChange={e => {
+                                    // Tự động điền label theo tên vật phẩm luôn cho tiện
+                                    const art = artifacts.find(a => a.id === e.target.value);
+                                    setForm({...form, artifactId: e.target.value, hotspotLabel: art ? art.name : ""});
+                                }}
+                                style={{...inputStyle, width: '100%'}}
+                            >
+                                <option value="">-- Chọn vật phẩm --</option>
+                                {artifacts.map(a => (
+                                    <option key={a.id} value={a.id}>{a.name}</option>
+                                ))}
+                            </select>
+                            {artifacts.length === 0 && <p style={{color: 'red', fontSize: '11px'}}>Chưa có vật phẩm nào trong phòng này. Hãy sang tab "Quản lý Vật phẩm" để tạo trước.</p>}
+                        </div>
+                    )}
+
+                    {form.hotspotType === 'chat' && (
+                <div style={{marginTop: '10px', padding: '10px', background: '#EDE7F6', borderRadius: '5px', border: '1px solid #673AB7'}}>
+                    <small style={{display:'block', marginBottom:'5px', fontWeight:'bold', color: '#512DA8'}}>🎭 Cấu hình nhân vật:</small>
+                    
+                    <textarea 
+                        rows="2" 
+                        placeholder="Vai trò (System Prompt): VD: Bạn là một cựu chiến binh già, giọng điệu tự hào..." 
+                        style={{...inputStyle, width: '100%', fontSize: '12px'}}
+                        value={form.instruction}
+                        onChange={e => setForm({...form, instruction: e.target.value})}
+                    />
+                    
+                    <textarea 
+                        rows="3" 
+                        placeholder="Kiến thức riêng tại điểm này: VD: Đây là góc trưng bày bằng khen năm 1995..." 
+                        style={{...inputStyle, width: '100%', fontSize: '12px', marginTop: '5px'}}
+                        value={form.knowledge}
+                        onChange={e => setForm({...form, knowledge: e.target.value})}
+                    />
+                </div>
+            )}
+
+            <p style={{ fontSize: "11px", color: "#666", marginTop: "5px", fontStyle: "italic" }}>
+              👉 Click vào điểm (+) trên ảnh để đặt vị trí.
+            </p>
+          </div>
+
+          <button 
+            onClick={() => { setShowViewer(false); setCurrentPanoData(null); }} 
+            style={btnClose}
+          >
+            ✖️ Đóng Viewer
+          </button>
+        </div>
+      )}
 
 
       <footer style={footerStyle}>
@@ -769,7 +1527,15 @@ for (let i = 0; i < count; i++) {
   );
 }
 
+const scrollableMainStyle = {
+    flex: 1, 
+    overflowY: "auto",
+};
 
+const scrollableWrapper = {
+    flex: 1,
+    overflowY: "auto",
+};
 const sectionStyle = {
   flex: 1,
   background: "#fff",

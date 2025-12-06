@@ -1,6 +1,5 @@
 import models from "../models/index.js";
 
-// Tạo Room mới
 export const createRoom = async (req, res) => {
   try {
     const room = await models.Room.create(req.body);
@@ -10,7 +9,6 @@ export const createRoom = async (req, res) => {
   }
 };
 
-// Lấy toàn bộ Room
 export const listRooms = async (req, res) => {
   const rooms = await models.Room.findAll();
   res.json(rooms);
@@ -25,7 +23,6 @@ export const getRoom = async (req, res) => {
   res.json(room);
 };
 
-// Cập nhật Room
 export const updateRoom = async (req, res) => {
   const room = await models.Room.findByPk(req.params.id);
   if (!room) return res.status(404).json({ error: "Room not found" });
@@ -33,7 +30,6 @@ export const updateRoom = async (req, res) => {
   res.json(room);
 };
 
-// Xoá Room
 export const deleteRoom = async (req, res) => {
   const room = await models.Room.findByPk(req.params.id);
   if (!room) return res.status(404).json({ error: "Room not found" });

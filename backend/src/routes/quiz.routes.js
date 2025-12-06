@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   listQuestions,
   createQuestion,
+  updateQuestion,
   deleteQuestion,
   saveResult,    
   getMyHistory,  
@@ -12,6 +13,7 @@ const router = Router();
 
 router.get("/", listQuestions);
 router.post("/", createQuestion);
+router.put("/:id", updateQuestion);
 router.delete("/:id", deleteQuestion);
 
 router.post("/result", saveResult);    

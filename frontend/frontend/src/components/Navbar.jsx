@@ -10,17 +10,22 @@ import {
   FaFacebookF,
   FaTwitter,
   FaDownload,
-  FaUsers
+  FaUsers,
+  FaHistory,
+  FaSignInAlt ,
+  FaSignOutAlt 
 } from "react-icons/fa";
 import { useContext, useState } from "react";
 import { ModeContext } from "../context/ModeContext";
+import { AuthContext } from "../context/AuthContext";
 import { v4 as uuidv4 } from 'uuid';
 
-function Navbar({ onShare }) {
+function Navbar({ onShare, onToggleHistory, onOpenExplore }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(false);
   const [openShare, setOpenShare] = useState(false);
   const { setMode } = useContext(ModeContext);
+  const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleCreateGroup = () => {
@@ -33,6 +38,10 @@ function Navbar({ onShare }) {
     
     
     setOpenMenu(false);
+  };
+
+ const handleLogout = () => {
+      logout();
   };
 
   return (
@@ -55,17 +64,59 @@ function Navbar({ onShare }) {
             : "scale-y-0 opacity-0 pointer-events-none"
         }`}
       >
+
+{user ? (
+    <button 
+        onClick={handleLogout}
+        className="group relative"
+    >
+        <div className="text-white text-2xl hover:text-yellow-300 transition flex items-center justify-center">
+             <img 
+                src={user.avatar || "https://ui-avatars.com/api/?name=" + user.username} 
+                alt="User Avatar" 
+                className="w-7 h-7 rounded-full border border-white hover:border-yellow-300 object-cover"
+            />
+        </div>
         
-        <Link to="/explore" className="group relative">
-          <FaMapMarkedAlt className="text-white text-2xl hover:text-yellow-300 transition" />
-          <span className="tooltip-right">Khám phá</span>
-        </Link>
+        <span className="tooltip-right flex items-center gap-2">
+            <FaSignOutAlt /> Đăng xuất ({user.username})
+        </span>
+    </button>
+) : (
+    <Link to="/login" className="group relative">
+        <FaSignInAlt className="text-white text-2xl hover:text-yellow-300 transition" />
+        <span className="tooltip-right">Đăng nhập</span>
+    </Link>
+)}
+      
+        
+        <button 
+            onClick={() => {
+                onOpenExplore();
+                setOpenMenu(false);
+            }}
+            className="group relative text-white text-2xl hover:text-yellow-300 transition"
+        >
+          <FaMapMarkedAlt />
+          <span className="tooltip-right">Hiện vật</span>
+        </button>
 
       
         <Link to="/learning" className="group relative">
           <FaGraduationCap className="text-white text-2xl hover:text-yellow-300 transition" />
           <span className="tooltip-right">Học tập</span>
         </Link>
+
+        <button 
+            onClick={() => {
+                onToggleHistory();
+                setOpenMenu(false); 
+            }}
+            className="group relative text-white text-2xl hover:text-yellow-300 transition"
+        >
+            <FaHistory />
+            <span className="tooltip-right">Lịch sử tham quan</span>
+        </button>
 
        
         <Link to="/about" className="group relative">
@@ -84,15 +135,15 @@ function Navbar({ onShare }) {
           <span className="tooltip-right">Chế độ xem</span>
 
           {openDropdown && (
-            <div className="absolute right-[60px] top-0 bg-black/80 rounded-lg shadow-lg py-2 w-40 border border-yellow-500/30 backdrop-blur-xl animate-fadeIn">
+            <div className="absolute right-[60px] top-0 bg-black/80 rounded-lg shadow-lg py-2 w-max border border-yellow-500/30 backdrop-blur-xl animate-fadeIn">
               <button
                 onClick={() => {
                   setMode("point");
                   setOpenDropdown(false);
                 }}
-                className="block w-full text-left px-4 py-2 text-white hover:bg-yellow-600 hover:text-white transition"
+                className="block w-full text-left px-4 py-2 text-white hover:bg-yellow-600 hover:text-white transition whitespace-nowrap"
               >
-                📍 Theo điểm
+                📍 Duyệt danh sách
               </button>
               <button
                 onClick={() => {

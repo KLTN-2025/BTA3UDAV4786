@@ -23,7 +23,6 @@ export const AuthProvider = ({ children }) => {
           setUser(null);
         }
       } catch (error) {
-        console.error("Check login error", error);
         setUser(null);
       } finally {
         setLoading(false);
