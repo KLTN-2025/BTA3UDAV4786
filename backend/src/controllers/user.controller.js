@@ -1,5 +1,5 @@
 import db from "../models/index.js";
-
+import { Op } from "sequelize";
 const User = db.User;
 
 //sắp xếp mới nhất trước
@@ -43,5 +43,29 @@ export const deleteUser = async (req, res) => {
     res.json({ message: "Đã xóa user (Soft Delete)" });
   } catch (error) {
     res.status(500).json({ message: "Lỗi xóa user", error: error.message });
+  }
+};
+
+
+export const deleteUsersBulk = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Danh sách ID không hợp lệ" });
+    }
+
+   
+    const result = await User.destroy({
+      where: {
+        id: {
+          [Op.in]: ids 
+        }
+      }
+    });
+
+    res.json({ message: `Đã xóa ${result} người dùng thành công.` });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi xóa hàng loạt", error: error.message });
   }
 };

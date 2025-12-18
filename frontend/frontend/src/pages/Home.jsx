@@ -13,7 +13,8 @@ import ControlBar from "../components/ControlBar";
 import LogoCorner from "../components/LogoCorner";
 import Navbar from "../components/Navbar";
 import ChatBox from "../components/ChatBox";
-import GuideChatModal from "../components/GuideChatModal"
+import GuideChatModal from "../components/GuideChatModal";
+import TourSystemHint from "../components/TourSystemHint";
 import HistoryModal from "../components/HistoryModal";
 import ArtifactModal from "../components/ArtifactModal";
 import ExploreModal from "../components/ExploreModal";
@@ -29,6 +30,7 @@ export default function Home() {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [showArrowGuides, setShowArrowGuides] = useState(true);
 
   const panoRef = useRef();
   const canvasRef = useRef(null);
@@ -106,7 +108,7 @@ export default function Home() {
   }, [currentPano]);
 
   const handleLeaveGroup = () => {
-    if (window.confirm("Bạn có chắc muốn rời nhóm và xóa đoạn chat?")) {
+    if (confirmDelete("Bạn có chắc muốn rời nhóm và xóa đoạn chat?")) {
         setSearchParams({}); 
         setShowChat(false);
         clearMessages();
@@ -131,6 +133,9 @@ export default function Home() {
 
   const handleHotspotClick = async (spot) => {
     if (spot.type === 'nav' || !spot.type) {
+      if (showArrowGuides) {
+            setShowArrowGuides(false);
+        }
         const nextPano = allPanoramas.find((p) => p.id === spot.toPanoramaId);
         if (nextPano) {
           setCurrentPano(processPanoUrl(nextPano));
@@ -157,6 +162,22 @@ export default function Home() {
            instruction: spot.instruction, 
            knowledge: spot.knowledge     
        });
+    }
+  };
+
+
+  const handleAutoFindAi = () => {
+    const aiSpot = currentPanoHotspots.find(h => h.type === 'chat');
+
+    if (aiSpot) {
+      setSelectedChatSpot({
+        name: aiSpot.label,
+        instruction: aiSpot.instruction,
+        knowledge: aiSpot.knowledge    
+      });
+      notifySuccess("Đã kết nối với Hướng dẫn viên AI!"); 
+    } else {
+      notifyError("Khu vực này hiện chưa có Hướng dẫn viên AI thường trực.");
     }
   };
 
@@ -202,7 +223,7 @@ export default function Home() {
         window.open(shareUrl, '_blank', 'width=600,height=400');
     }
     
-    alert("📸 Đã chụp ảnh góc nhìn hiện tại và tải xuống máy bạn! Hãy dùng nó để đăng bài nhé.");
+    notifySuccess("📸 Đã chụp ảnh góc nhìn hiện tại và tải xuống máy bạn! Hãy dùng nó để đăng bài nhé.");
   };
 
   const handleHistorySelect = (panoId) => {
@@ -217,14 +238,22 @@ export default function Home() {
     localStorage.removeItem("visit_history");
   };
 
+  const hasAiHotspot = currentPanoHotspots.some(spot => spot.type === 'chat');
+
   if (loading) return <div className="flex h-screen items-center justify-center bg-black text-white">Đang tải dữ liệu bảo tàng...</div>;
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
       <Navbar 
       onShare={handleScreenshotAndShare}
-      onToggleHistory={() => setShowHistory(!showHistory)}
-      onOpenExplore={() => setShowExplore(true)}
+      onToggleHistory={() => {
+        setShowTimeline(false); 
+        setShowHistory(!showHistory)
+      }}
+      onOpenExplore={() => {
+        setShowTimeline(false);
+        setShowExplore(true)
+      }}
        />
       <LogoCorner onClick={() => navigate("/")} />
       
@@ -238,6 +267,8 @@ export default function Home() {
               image={currentPano.imageUrl}
               hotspots={currentPanoHotspots}
               onHotspotClick={handleHotspotClick}
+              nadirLogo="/assets/logo3.png"
+              showArrows={showArrowGuides}
               
             />
           </Suspense>
@@ -253,7 +284,11 @@ export default function Home() {
 
       {!showTimeline && (
           <button 
-            onClick={() => setShowTimeline(true)}
+            onClick={() =>{
+              setShowHistory(false);
+              setShowExplore(false);
+              setShowTimeline(true)
+            }}
             className="absolute top-24 left-0 z-40 bg-gradient-to-r from-[#4e342e] to-[#3e2723] text-white pl-4 pr-6 py-2 rounded-r-full shadow-lg flex items-center gap-3 group border-l-4 border-yellow-500"
           >
           
@@ -267,6 +302,13 @@ export default function Home() {
 
       {showTimeline && (
         <TimelineDrawer onClose={() => setShowTimeline(false)} />
+      )}
+
+      {!selectedChatSpot && (
+        <TourSystemHint
+         onOpenAiChat={handleAutoFindAi}
+         hasAiHotspot={hasAiHotspot}
+        />
       )}
 
       {showExplore && (
@@ -305,6 +347,7 @@ export default function Home() {
         <HotspotBar 
           hotspots={allPanoramas.map(p => ({ id: p.id, name: p.title, image: processPanoUrl(p).imageUrl }))} 
           onSelect={handleBarSelect} 
+          currentId={currentPano?.id}
         />
       )}
       

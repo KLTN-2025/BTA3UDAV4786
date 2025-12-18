@@ -3,8 +3,10 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { Sphere, Html, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import gsap from "gsap";
+import NadirArrows from "./NadirArrows";
+import TechHotspot from "./TechHotspot";
 
-const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
+const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick, nadirLogo, showArrows }, ref) => {
   const { camera, gl } = useThree();
   const controlsRef = useRef();
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -38,6 +40,10 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isTransitioning) return;
+      const activeTag = document.activeElement.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement.isContentEditable) {
+        return;
+      }
       switch(e.code) {
         case 'KeyW': case 'ArrowUp': keysRef.current.forward = true; break;
         case 'KeyS': case 'ArrowDown': keysRef.current.backward = true; break;
@@ -48,6 +54,11 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
     };
 
     const handleKeyUp = (e) => {
+      const activeTag = document.activeElement.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement.isContentEditable) {
+        keysRef.current = { forward: false, backward: false, left: false, right: false };
+        return;
+      }
       switch(e.code) {
         case 'KeyW': case 'ArrowUp': keysRef.current.forward = false; break;
         case 'KeyS': case 'ArrowDown': keysRef.current.backward = false; break;
@@ -91,6 +102,7 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
 
   const [textureMain, setTextureMain] = useState(null);
   const [textureNext, setTextureNext] = useState(null);
+  const [nadirTexture, setNadirTexture] = useState(null);
   const fadeMaterialRef = useRef(null);
 
   useEffect(() => {
@@ -102,6 +114,15 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
     });
   }, []); 
 
+  useEffect(() => {
+    if (nadirLogo) {
+        const loader = new THREE.TextureLoader();
+        loader.load(nadirLogo, (tex) => {
+            setNadirTexture(tex);
+        });
+    }
+  }, [nadirLogo]);
+
   const handleHotspotClick = (spot) => {
     if (isTransitioning) return;
     setIsTransitioning(true);
@@ -109,7 +130,14 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
     const targetVec = new THREE.Vector3(spot.x, spot.y, spot.z);
     const spherical = new THREE.Spherical().setFromVector3(targetVec);
 
-    const tl = gsap.timeline();
+    const tl = gsap.timeline({
+      onComplete: () => {
+       
+        if (spot.type === 'info' || spot.type === 'chat') {
+           setIsTransitioning(false); 
+        }
+      }
+    });
     tl.to(controlsRef.current, {
       azimuthAngle: spherical.theta,
       polarAngle: Math.PI / 2,
@@ -180,6 +208,24 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
         </Sphere>
       )}
 
+      {nadirTexture && (
+        <mesh 
+            position={[0, -180, 0]} // Đặt thấp xuống trục Y (dưới chân)
+            rotation={[-Math.PI / 2, 0, 0]} // Xoay ngang ra để mặt hướng lên trên
+            renderOrder={2} // Vẽ đè lên background
+        >
+            <circleGeometry args={[45, 64]} /> {/* Bán kính 60 */}
+            <meshBasicMaterial 
+                map={nadirTexture} 
+                transparent={true} 
+                side={THREE.DoubleSide} 
+                depthTest={false}
+            />
+            
+        </mesh>
+      )}
+      {showArrows && <NadirArrows hotspots={hotspots} />}
+
       {hotspots && hotspots.map((spot) => {
         if (spot.type === 'nav' || !spot.type) {
         const vecXZ = new THREE.Vector3(spot.x, 0, spot.z);
@@ -249,93 +295,15 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
           </group>
         );
       }
-      if (spot.type === 'info') {
-            const vec = new THREE.Vector3(spot.x, spot.y, spot.z); 
-            vec.normalize().multiplyScalar(450); // Kéo lại gần tường
-
+      if (spot.type === 'info' || spot.type === 'chat') {
             return (
-              <group 
-                key={spot.id} 
-                position={[vec.x, vec.y, -vec.z]} 
-                onClick={(e) => { 
-                    e.stopPropagation(); 
-                    onHotspotClick(spot); 
-                }}
-                onPointerOver={() => document.body.style.cursor = 'help'}
-                onPointerOut={() => document.body.style.cursor = 'auto'}
-              >
-              
-                <mesh 
-                    visible={false}
-                    lookAt={() => new THREE.Vector3(0,0,0)} 
-                >
-                    <planeGeometry args={[60, 60]} /> 
-                    <meshBasicMaterial side={THREE.DoubleSide} />
-                </mesh>
-
-                <mesh renderOrder={5}>
-                   <circleGeometry args={[20, 32]} />
-                   <meshBasicMaterial color="rgba(0,0,0,0.7)" transparent depthTest={false}/>
-                </mesh>
-                <mesh renderOrder={6}>
-                   <ringGeometry args={[20, 23, 32]} />
-                   <meshBasicMaterial color="#FFD700" transparent side={THREE.DoubleSide} depthTest={false} />
-                </mesh>
-
-                <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }}>
-                   <div className="flex flex-col items-center">
-                      <div className="text-2xl drop-shadow-md">ℹ️</div>
-                      <div className="mt-2 bg-black/80 text-[#FFD700] px-2 py-1 rounded text-xs font-bold whitespace-nowrap border border-yellow-600/50">
-                         {spot.label}
-                      </div>
-                   </div>
-                </Html>
-              </group>
+                <TechHotspot 
+                    key={spot.id} 
+                    spot={spot} 
+                    onClick={handleHotspotClick} 
+                />
             );
         }
-
-        if (spot.type === 'chat') {
-        const vec = new THREE.Vector3(spot.x, spot.y, spot.z);
-        vec.normalize().multiplyScalar(450); // Khoảng cách hiển thị
-
-        return (
-          <group 
-            key={spot.id} 
-            position={[vec.x, vec.y, -vec.z]} 
-            onClick={(e) => { 
-                e.stopPropagation(); 
-                onHotspotClick(spot);
-            }}
-            onPointerOver={() => document.body.style.cursor = 'help'}
-            onPointerOut={() => document.body.style.cursor = 'auto'}
-          >
-          
-            <mesh visible={false} lookAt={() => new THREE.Vector3(0,0,0)}>
-                <planeGeometry args={[60, 80]} />
-                <meshBasicMaterial side={THREE.DoubleSide} />
-            </mesh>
-
-        
-            <mesh>
-                <ringGeometry args={[20, 25, 32]} />
-                <meshBasicMaterial color="#9C27B0" transparent opacity={0.6} side={THREE.DoubleSide} />
-            </mesh>
-
-        
-            <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }}>
-                <div className="flex flex-col items-center animate-bounce-slow">
-                  
-                   <div className="text-4xl filter drop-shadow-lg cursor-pointer transform hover:scale-110 transition-transform">
-                      🤖
-                   </div>
-                   <div className="mt-1 bg-purple-900/90 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border border-purple-400 shadow-[0_0_10px_#9C27B0]">
-                      {spot.label}
-                   </div>
-                </div>
-            </Html>
-          </group>
-        );
-    }
         
         return null;
       })}
@@ -347,6 +315,8 @@ const PanoramaScene = forwardRef(({ image, hotspots, onHotspotClick }, ref) => {
         rotateSpeed={-0.5}
         enableDamping
         enablePan={false}
+        minPolarAngle={0}
+        maxPolarAngle={Math.PI}
       />
     </>
   );

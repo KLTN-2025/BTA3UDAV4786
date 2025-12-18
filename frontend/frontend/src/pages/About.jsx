@@ -14,18 +14,18 @@ export default function About() {
   };
 
   const teamMembers = [
-    { id: 1, name: "Dương Tuấn Kiệt", role: "Trưởng nhóm", image: "https://scontent.fdad1-1.fna.fbcdn.net/v/t39.30808-6/529420442_745915744963932_3171413607805276420_n.jpg?_nc_cat=109&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=bqOmVCZ3JIEQ7kNvwFehEwC&_nc_oc=AdkyKmGriX-1ntK7kPwAy7N44c2uPjLbFfBPevAe0e8RO1OoxGFhvl3QIlnBfa5xY3i6A5FftDRnd7VsEHfNLJN0&_nc_zt=23&_nc_ht=scontent.fdad1-1.fna&_nc_gid=2qIHlxr6PhQVTVmYGncrwg&oh=00_AfhHlIB_amlGDmfh-_VqV4KiUVFfM3Wo7SWVQzLsqVx5LA&oe=6926D69F" },
-    { id: 2, name: "Đào Hoàng Việt Anh", role: "Thành viên", image: "https://m.yodycdn.com/products/hinhanhdoremon2_m2li5fg6g1b0cmp4zr5.jpg" },
-    { id: 3, name: "Lê Văn Vinh", role: "Thành viên", image: "https://m.yodycdn.com/products/hinhanhdoremon2_m2li5fg6g1b0cmp4zr5.jpg" },
-    { id: 4, name: "Phạm Văn Đức", role: "Thành viên", image: "https://m.yodycdn.com/products/hinhanhdoremon2_m2li5fg6g1b0cmp4zr5.jpg" },
-    { id: 5, name: "Nguyễn Văn Nhân", role: "Thành viên", image: "https://m.yodycdn.com/products/hinhanhdoremon2_m2li5fg6g1b0cmp4zr5.jpg" },
+    { id: 1, name: "Dương Tuấn Kiệt", role: "Trưởng nhóm", image: "/assets/kiet.jpg" },
+    { id: 2, name: "Đào Hoàng Việt Anh", role: "Thành viên", image: "/assets/anh.jpg" },
+    { id: 3, name: "Lê Quang Vinh", role: "Thành viên", image: "/assets/vinh.png" },
+    { id: 4, name: "Đinh Văn Trọng Đạt", role: "Thành viên", image: "/assets/dat.jpg" },
+    { id: 5, name: "Nguyễn Thành Nhân", role: "Thành viên", image: "/assets/nhan.jpg" },
   ];
 
   return (
     <div className="min-h-screen bg-[#121212] text-gray-300 font-sans">
      
       <LogoCorner onClick={() => navigate("/")} />
-      <AIGuide />
+     
       
       <div className="bg-[#1a1a1a] border-b border-gray-800">
         <div className="container mx-auto px-6 py-12 text-center">

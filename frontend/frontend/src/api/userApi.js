@@ -22,5 +22,16 @@ export const UserAPI = {
       method: "DELETE",
     });
     return res.json();
+  },
+
+  async deleteBulk(ids) {
+    const res = await fetch(`${API_BASE_URL}/users/bulk-delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ids }),
+    });
+    return res.json();
   }
 };

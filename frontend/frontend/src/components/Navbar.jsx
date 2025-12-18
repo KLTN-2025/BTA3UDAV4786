@@ -13,17 +13,23 @@ import {
   FaUsers,
   FaHistory,
   FaSignInAlt ,
-  FaSignOutAlt 
+  FaSignOutAlt,
+  FaShieldAlt,
+  FaInfo,
+  FaCogs,
+  FaUserShield
 } from "react-icons/fa";
 import { useContext, useState } from "react";
 import { ModeContext } from "../context/ModeContext";
 import { AuthContext } from "../context/AuthContext";
 import { v4 as uuidv4 } from 'uuid';
-
+import { confirmDelete, notifySuccess, notifyError } from '../utils/alertHelper';
 function Navbar({ onShare, onToggleHistory, onOpenExplore }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(false);
   const [openShare, setOpenShare] = useState(false);
+  const [openAboutDropdown, setOpenAboutDropdown] = useState(false);
+  const [openAdminDropdown, setOpenAdminDropdown] = useState(false);
   const { setMode } = useContext(ModeContext);
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -34,7 +40,7 @@ function Navbar({ onShare, onToggleHistory, onOpenExplore }) {
     
     const link = `${window.location.origin}/?room=${newRoomId}`;
     navigator.clipboard.writeText(link);
-    alert(`✅ Đã tạo phòng: ${newRoomId}\n🔗 Link đã copy vào bộ nhớ tạm!\nGửi cho bạn bè để cùng tham quan nhé.`);
+    notifySuccess(`✅ Đã tạo phòng: ${newRoomId}\n🔗 Link đã copy vào bộ nhớ tạm!\nGửi cho bạn bè để cùng tham quan nhé.`);
     
     
     setOpenMenu(false);
@@ -66,28 +72,74 @@ function Navbar({ onShare, onToggleHistory, onOpenExplore }) {
       >
 
 {user ? (
-    <button 
-        onClick={handleLogout}
-        className="group relative"
-    >
-        <div className="text-white text-2xl hover:text-yellow-300 transition flex items-center justify-center">
-             <img 
-                src={user.avatar || "https://ui-avatars.com/api/?name=" + user.username} 
-                alt="User Avatar" 
-                className="w-7 h-7 rounded-full border border-white hover:border-yellow-300 object-cover"
-            />
-        </div>
-        
-        <span className="tooltip-right flex items-center gap-2">
-            <FaSignOutAlt /> Đăng xuất ({user.username})
-        </span>
-    </button>
-) : (
-    <Link to="/login" className="group relative">
-        <FaSignInAlt className="text-white text-2xl hover:text-yellow-300 transition" />
-        <span className="tooltip-right">Đăng nhập</span>
-    </Link>
-)}
+            user.role === 'admin' ? (
+                <div className="group relative">
+                    <button 
+                        onClick={() => setOpenAdminDropdown(!openAdminDropdown)}
+                        className={`text-white text-2xl transition flex items-center justify-center ${openAdminDropdown ? "text-yellow-300" : "hover:text-yellow-300"}`}
+                    >
+                         <div className="relative">
+                            <img 
+                                src={user.avatar || "https://ui-avatars.com/api/?name=" + user.username} 
+                                alt="Admin Avatar" 
+                                className={`w-8 h-8 rounded-full border-2 object-cover ${openAdminDropdown ? "border-yellow-300" : "border-red-500"}`}
+                            />
+                           
+                            <div className="absolute -bottom-1 -right-1 bg-black rounded-full p-[2px]">
+                                <FaUserShield className="text-[10px] text-yellow-400" />
+                            </div>
+                         </div>
+                    </button>
+                    <span className="tooltip-right">Xin chào Admin</span>
+
+                    {openAdminDropdown && (
+                        <div className="absolute right-[60px] top-0 bg-black/80 rounded-lg shadow-lg py-2 w-max border border-yellow-500/30 backdrop-blur-xl animate-fadeIn">
+                  
+                            <Link
+                                to="/dashboard"
+                                onClick={() => {
+                                    setOpenAdminDropdown(false);
+                                    setOpenMenu(false);
+                                }}
+                                className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-yellow-600 hover:text-white transition whitespace-nowrap gap-3 border-b border-white/10"
+                            >
+                                <FaCogs /> Trang quản trị
+                            </Link>
+
+                         
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center w-full text-left px-4 py-3 text-red-400 hover:bg-red-600 hover:text-white transition whitespace-nowrap gap-3"
+                            >
+                                <FaSignOutAlt /> Đăng xuất
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <button 
+                    onClick={handleLogout}
+                    className="group relative"
+                >
+                    <div className="text-white text-2xl hover:text-yellow-300 transition flex items-center justify-center">
+                        <img 
+                            src={user.avatar || "https://ui-avatars.com/api/?name=" + user.username} 
+                            alt="User Avatar" 
+                            className="w-7 h-7 rounded-full border border-white hover:border-yellow-300 object-cover"
+                        />
+                    </div>
+                    <span className="tooltip-right flex items-center gap-2">
+                        <FaSignOutAlt /> Đăng xuất ({user.username})
+                    </span>
+                </button>
+            )
+        ) : (
+            // CHƯA ĐĂNG NHẬP: Hiện nút Login
+            <Link to="/login" className="group relative">
+                <FaSignInAlt className="text-white text-2xl hover:text-yellow-300 transition" />
+                <span className="tooltip-right">Đăng nhập</span>
+            </Link>
+        )}
       
         
         <button 
@@ -119,10 +171,44 @@ function Navbar({ onShare, onToggleHistory, onOpenExplore }) {
         </button>
 
        
-        <Link to="/about" className="group relative">
-          <FaInfoCircle className="text-white text-2xl hover:text-yellow-300 transition" />
-          <span className="tooltip-right">Giới thiệu</span>
-        </Link>
+        <div className="group relative">
+          <button
+            onClick={() => setOpenAboutDropdown(!openAboutDropdown)}
+            className={`text-2xl transition ${openAboutDropdown ? "text-yellow-300" : "text-white hover:text-yellow-300"}`}
+          >
+            <FaInfoCircle />
+          </button>
+          <span className="tooltip-right">Thông tin</span>
+
+          {openAboutDropdown && (
+            <div className="absolute right-[60px] top-0 bg-black/80 rounded-lg shadow-lg py-2 w-max border border-yellow-500/30 backdrop-blur-xl animate-fadeIn">
+              <Link
+                to="/about"
+                onClick={() => {
+                    setOpenAboutDropdown(false);
+                    setOpenMenu(false);
+                }}
+                className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-yellow-600 hover:text-white transition whitespace-nowrap gap-3 border-b border-white/10"
+              >
+                <FaInfo /> Giới thiệu
+              </Link>
+              
+            
+              <Link
+                to="/policy"
+                state={{ scrollTo: 'policy' }}
+                onClick={() => {
+                    setOpenAboutDropdown(false);
+                    setOpenMenu(false);
+                }}
+                className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-yellow-600 hover:text-white transition whitespace-nowrap gap-3"
+              >
+                <FaShieldAlt className="text-blue-400" /> Chính sách & Dữ liệu
+              </Link>
+
+            </div>
+          )}
+        </div>
 
         
         <div className="group relative">

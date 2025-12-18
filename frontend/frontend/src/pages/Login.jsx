@@ -9,7 +9,11 @@ function Login() {
 
   useEffect(() => {
     if (user) {
-      navigate("/");
+      if (user.role === 'admin') {
+        navigate("/dashboard");
+      } else {
+        navigate("/");
+      }
     }
   }, [user, navigate]);
 
@@ -20,7 +24,7 @@ function Login() {
   return (
     <div 
       className="h-screen w-full flex items-center justify-center bg-cover bg-center relative" 
-      style={{ backgroundImage: "url('/museum-bg.jpeg')" }}
+      style={{ backgroundImage: "url('/assets/login.png')" }}
     >
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/70"></div>
 

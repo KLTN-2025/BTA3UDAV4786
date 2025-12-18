@@ -55,6 +55,7 @@ export default function Dashboard() {
   const formRef = useRef(form);
 
   const [currentPanoData, setCurrentPanoData] = useState(null);
+  const [editingPano, setEditingPano] = useState(null);
 
   const [aiTopic, setAiTopic] = useState("");
   const [aiContent, setAiContent] = useState("");
@@ -132,15 +133,14 @@ export default function Dashboard() {
     setIsSyncing(true);
     try {
         const res = await AdminAPI.syncArtifacts();
-        notifySuccess(`✅ ${res.message} (Đã nạp ${res.details.synced_count} vật phẩm)`);
+        notifySuccess(`${res.message} (Đã nạp ${res.details.synced_count} vật phẩm)`);
     } catch (e) {
-        notifyError("❌ Lỗi đồng bộ: " + e.message);
+        notifyError("Lỗi đồng bộ: " + e.message);
     } finally {
         setIsSyncing(false);
     }
   };
 
-  // --- HÀM 2: NẠP KIẾN THỨC TRỰC TIẾP ---
   const handleSaveKnowledge = async (e) => {
     e.preventDefault();
     if(!aiTopic || !aiContent) return notifyError("Nhập đủ thông tin!");
@@ -152,12 +152,11 @@ export default function Dashboard() {
             notifySuccess("Đã cập nhật kiến thức!");
             setEditingKnowledge(null);
         } else {
-            // Thêm mới
+           
             await AIConfigAPI.addKnowledge(aiTopic, aiContent);
             notifySuccess("Đã nạp kiến thức mới!");
         }
         
-        // Reset form và reload list
         setAiTopic(""); 
         setAiContent("");
         loadKnowledgeList();
@@ -191,21 +190,27 @@ export default function Dashboard() {
   };
 
 const handleDeleteRoom = async (roomId) => {
-  if (!await confirmDelete("Bạn có chắc muốn xóa Room này không?")) return;
-  await RoomAPI.delete(roomId);
-  notifySuccess("Đã xóa phòng thành công!");
-  loadRooms();
-  setSelectedRoom(null);
-  setPanoramas([]);
-  setHotspots([]);
+  if (!await confirmDelete("CẢNH BÁO: Xóa phòng sẽ xóa toàn bộ PANORAMAS và HIỆN VẬT bên trong. Bạn chắc chắn chứ?")) return;
+  
+  try {
+    await RoomAPI.delete(roomId);
+    
+    notifySuccess("Đã xóa phòng thành công!");
+    
+    loadRooms();
+    setSelectedRoom(null);
+    setPanoramas([]);
+    setHotspots([]);
+    setArtifacts([]);
+    setEditingRoom(null); 
+
+  } catch (error) {
+   
+    notifyError("Lỗi: " + error.message);
+  }
 };
 
-const handleDeletePanorama = async (panoId) => {
-  if (!await confirmDelete("Xóa panorama này?")) return;
-  await PanoramaAPI.delete(panoId);
-  notifySuccess("Đã xóa Panorama!");
-  if (selectedRoom) loadPanoramas(selectedRoom);
-};
+
 
 const handleDeleteHotspot = async (hotspotId, panoId) => {
   if (!await confirmDelete("Xóa hotspot này?")) return;
@@ -267,6 +272,82 @@ const handleDeleteHotspot = async (hotspotId, panoId) => {
 
   setForm({ ...form, panoTitle: "", panoFile: null });
   loadPanoramas(selectedRoom);
+};
+
+
+const handleSavePanorama = async (e) => {
+    e.preventDefault();
+    if (!selectedRoom) return notifyError("Chọn phòng trước!");
+    if (!form.panoTitle) return notifyError("Vui lòng nhập tên Panorama!");
+
+    const fd = new FormData();
+    fd.append("roomId", selectedRoom);
+    fd.append("title", form.panoTitle);
+    
+    if (form.panoFile) {
+        fd.append("image", form.panoFile);
+    }
+
+    try {
+        if (editingPano) {
+          
+            await PanoramaAPI.update(editingPano.id, fd);
+            notifySuccess("Đã cập nhật Panorama!");
+            setEditingPano(null); 
+        } else {
+         
+            if (!form.panoFile) return notifyError("Vui lòng chọn ảnh!");
+            await PanoramaAPI.create(fd);
+            notifySuccess("Upload panorama thành công!");
+        }
+
+    
+        setForm({ ...form, panoTitle: "", panoFile: null });
+       
+        document.getElementById("pano-file-input").value = ""; 
+        loadPanoramas(selectedRoom);
+        loadAllPanoramas();
+
+    } catch (error) {
+        notifyError("Lỗi: " + error.message);
+    }
+};
+
+const handleEditPanorama = (pano) => {
+    setEditingPano(pano);
+    setForm({
+        ...form,
+        panoTitle: pano.title,
+        panoFile: null 
+    });
+   
+    document.querySelector('#pano-form-section')?.scrollIntoView({ behavior: 'smooth' });
+};
+
+const handleCancelEditPanorama = () => {
+    setEditingPano(null);
+    setForm({ ...form, panoTitle: "", panoFile: null });
+    if(document.getElementById("pano-file-input")) {
+        document.getElementById("pano-file-input").value = "";
+    }
+};
+const handleDeletePanorama = async (panoId) => {
+    if (!await confirmDelete("Xóa panorama này? Toàn bộ Hotspot trong ảnh cũng sẽ mất.")) return;
+    
+    try {
+        await PanoramaAPI.delete(panoId);
+        notifySuccess("Đã xóa Panorama!");
+     
+        if (selectedRoom) loadPanoramas(selectedRoom);
+        loadAllPanoramas();
+      
+        if (selectedPanorama === panoId) {
+            setShowViewer(false);
+            setSelectedPanorama(null);
+        }
+    } catch (error) {
+        notifyError("Lỗi xóa: " + error.message);
+    }
 };
 
 const handleQuizFormChange = (e) => {
@@ -376,7 +457,7 @@ const handleQuizFormChange = (e) => {
            setEditingArtifact(null);
         } else {
            await ArtifactAPI.create(fd);
-           notifySuccess("✅ Đã thêm vật phẩm mới!");
+           notifySuccess("Đã thêm vật phẩm mới!");
         }
 
         setForm({...form, artifactName: "", artifactDesc: "", artifactFile: null});
@@ -405,6 +486,19 @@ const handleQuizFormChange = (e) => {
   const handleSaveTimeline = async (e) => {
     e.preventDefault();
     
+    if (!formTimeline.year || !formTimeline.title || !formTimeline.order) {
+        return notifyError("Vui lòng nhập đầy đủ Năm, Tiêu đề và Thứ tự hiển thị!");
+    }
+    const orderInt = parseInt(formTimeline.order);
+    const duplicate = timelineEvents.find(evt => 
+        evt.order === orderInt &&
+        (!editingEvent || evt.id !== editingEvent.id)
+    );
+
+    if (duplicate) {
+        return notifyError(`Số thứ tự ${orderInt} bị trùng với sự kiện "${duplicate.title}"! Vui lòng chọn số khác.`);
+    }
+
     const fd = new FormData();
     fd.append("year", formTimeline.year);
     fd.append("title", formTimeline.title);
@@ -548,17 +642,17 @@ const initPanoramaViewer = (pano, hotspotData) => {
         suggestionSpot.addEventListener("click", async () => {
           const currentForm = formRef.current;
 
-          // Validate
-          if (!currentForm.hotspotLabel) return notifyError("Vui lòng nhập Tên Hotspot!");
+          if (!currentForm.hotspotLabel) return alert("Vui lòng nhập Tên Hotspot!");
           
           if (currentForm.hotspotType === 'nav' && !currentForm.toPanoramaId) {
-             return notifyError("Loại 'Đi tiếp' cần chọn Phòng đích!");
+             return alert("Loại 'Đi tiếp' cần chọn Phòng đích!");
           }
           if (currentForm.hotspotType === 'info' && !currentForm.artifactId) {
-             return notifyError("Loại 'Vật phẩm' cần chọn Vật phẩm từ danh sách!");
+             return alert("Loại 'Vật phẩm' cần chọn Vật phẩm từ danh sách!");
           }
           if (currentForm.hotspotType === 'chat' && !currentForm.instruction) {
-              if(!confirmDelete("Bạn chưa nhập vai trò cho AI, sẽ dùng mặc định. Tiếp tục?")) return;
+              const agree = window.confirm("Bạn chưa nhập vai trò cho AI, sẽ dùng mặc định. Tiếp tục?");
+              if (!agree) return;
           }
 
           const pos = p.pos;
@@ -581,7 +675,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
 
           try {
             await HotspotAPI.create(newHotspot);
-            notifySuccess(`Tạo hotspot "${newHotspot.label}" thành công!`);
+            alert(`Tạo hotspot "${newHotspot.label}" thành công!`);
 
             const newData = await HotspotAPI.getByPanorama(pano.id);
             initPanoramaViewer(pano, newData); 
@@ -628,7 +722,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-           🏛️ DTU Virtual Museum — Quản Trị Dữ Liệu
+           🏛️ DTU VM — Quản Trị Dữ Liệu
         </div>
 
         <button
@@ -701,11 +795,15 @@ const initPanoramaViewer = (pano, hotspotData) => {
 
 
         {activeTab === "museum" && (
-  <main style={{...scrollableMainStyle, display: "flex", gap: "20px", padding: "20px" }}>
+  <main style={{...scrollableMainStyle, display: "flex", gap: "20px", padding: "20px", height: '100%', overflow: 'hidden' }}>
     {/* ROOM */}
-    <section style={sectionStyle}>
-      <h3>🗂️ Phòng</h3>
-      
+    <section style={{
+        ...sectionStyle, 
+        display: "flex", 
+        flexDirection: "column", 
+        overflow: "hidden"}}>
+      <h3 style={{ flexShrink: 0 }}>🗂️ Phòng</h3>
+      <div style={{ flexShrink: 0 }}>
       <form onSubmit={handleSaveRoom}>
         <input
           type="text"
@@ -724,9 +822,11 @@ const initPanoramaViewer = (pano, hotspotData) => {
           </>
         )}
       </form>
+    </div>
 
       {/* DANH SÁCH ROOM */}
-      <ul style={{ marginTop: "10px", listStyle: "none", paddingLeft: 0 }}>
+      <div style={{ flex: 1, overflowY: "auto", marginTop: "10px", paddingRight: "5px" }}>
+      <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
         {rooms.map((r) => (
           <li
             key={r.id}
@@ -788,14 +888,18 @@ const initPanoramaViewer = (pano, hotspotData) => {
           </li>
         ))}
       </ul>
+    </div>
     </section>
 
       
        {/* PANORAMA */}
-<section style={sectionStyle}>
-  <h3>🖼️ Panoramas</h3>
+<section style={{...sectionStyle, flex: 1, display: "flex", flexDirection: "column", overflow: "hidden"}} id="pano-form-section">
+  <h3 style={{ flexShrink: 0 }}>
+      {editingPano ? `✏️ Sửa Panorama: ${editingPano.title}` : "🖼️ Panoramas"}
+  </h3>
 
   {/* Nếu chưa chọn phòng, hiển thị thông báo hướng dẫn */}
+  <div style={{ flexShrink: 0 }}>
   {!selectedRoom ? (
     <div
       style={{
@@ -812,7 +916,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
       xem danh sách Panorama.
     </div>
   ) : (
-    <form onSubmit={handleAddPanorama} encType="multipart/form-data">
+    <form onSubmit={handleSavePanorama} encType="multipart/form-data">
       <input
         type="text"
         placeholder="Tên panorama..."
@@ -821,26 +925,46 @@ const initPanoramaViewer = (pano, hotspotData) => {
         style={inputStyle}
         disabled={!selectedRoom}
       />
+      
+      {/* Thêm ID để dễ reset value */}
       <input
+        id="pano-file-input" 
         type="file"
         onChange={(e) => setForm({ ...form, panoFile: e.target.files[0] })}
         disabled={!selectedRoom}
       />
-      <button
-        type="submit"
-        style={{
-          ...btnBrown,
-          opacity: selectedRoom ? 1 : 0.6,
-          cursor: selectedRoom ? "pointer" : "not-allowed",
-        }}
-        disabled={!selectedRoom}
-      >
-        🪶 Tải lên
-      </button>
+      {editingPano && <p style={{fontSize: '11px', color: '#666', margin: '5px 0'}}>Note: Để trống nếu giữ nguyên ảnh cũ.</p>}
+
+      <div style={{marginTop: '5px', marginBottom: '10px'}}>
+          {!editingPano ? (
+            <button
+                type="submit"
+                style={{ ...btnBrown, opacity: selectedRoom ? 1 : 0.6 }}
+                disabled={!selectedRoom}
+            >
+                🪶 Tải lên
+            </button>
+          ) : (
+            <div style={{display: 'flex', gap: '10px'}}>
+                <button type="submit" style={{...btnBrown, background: '#FF9800'}}>
+                    💾 Lưu thay đổi
+                </button>
+                <button 
+                    type="button" 
+                    onClick={handleCancelEditPanorama} 
+                    style={{...btnBrown, background: '#9E9E9E'}}
+                >
+                    ❌ Hủy
+                </button>
+            </div>
+          )}
+      </div>
     </form>
   )}
+</div>
 
   {/* Danh sách panorama */}
+  <div style={{ flex: 1, overflowY: "auto", paddingRight: "5px" }}>
   <div style={gridStyle}>
     {panoramas.length === 0 && selectedRoom && (
       <p style={{ gridColumn: "1 / -1", color: "#777" }}>
@@ -853,27 +977,57 @@ const initPanoramaViewer = (pano, hotspotData) => {
         key={p.id}
         style={{
           ...cardStyle,
-          background: selectedPanorama === p.id ? "#d7ccc8" : "#fafafa",
+          background: selectedPanorama === p.id ? "#d7ccc8" : (editingPano?.id === p.id ? "#FFF3E0" : "#fafafa"),
+          border: editingPano?.id === p.id ? "2px solid #FF9800" : "1px solid #ccc",
+          position: "relative"
         }}
       >
+        <div style={{display: 'flex', justifyContent: 'flex-end', gap: '5px', marginBottom: '5px'}}>
+             <button
+                onClick={() => handleEditPanorama(p)}
+                disabled={!!editingPano} // Không cho sửa cái khác khi đang sửa
+                style={{
+                  background: "transparent", border: "none", cursor: "pointer", fontSize: "16px",
+                  opacity: editingPano ? 0.3 : 1
+                }}
+                title="Sửa thông tin ảnh"
+             >
+                ✏️
+             </button>
+             <button
+                onClick={() => handleDeletePanorama(p.id)}
+                disabled={!!editingPano}
+                style={{
+                  background: "transparent", border: "none", cursor: "pointer", fontSize: "16px", color: "red",
+                   opacity: editingPano ? 0.3 : 1
+                }}
+                title="Xóa Panorama này"
+             >
+                🗑️
+             </button>
+        </div>
+
         <strong>{p.title}</strong>
         <img src={p.imageUrl} alt={p.title} style={imgStyle} />
+        
         <button
           onClick={() => openViewer(p)}
-          style={{ ...btnBrown, width: "100%", marginTop: "5px" }}
+          style={{ ...btnBrown, width: "100%", marginTop: "8px" }}
         >
           👁️ Xem & Chỉnh Hotspots
         </button>
       </div>
     ))}
   </div>
+</div>
 </section>
 
 
         {/* HOTSPOTS */}
-<section style={sectionStyle}>
-  <h3>⭕ Danh sách Hotspots</h3>
-
+        
+<section style={{...sectionStyle, display: "flex", flexDirection: "column", overflow: "hidden"}}>
+  <h3 style={{ flexShrink: 0 }}>⭕ Danh sách Hotspots</h3>
+<div style={{ flex: 1, overflowY: "auto", paddingRight: "5px" }}>
   {!selectedPanorama ? (
     <div style={noticeBoxStyle}>
       👈 Chọn một Panorama bên trái để xem danh sách Hotspot.
@@ -945,6 +1099,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
       </table>
     </>
   )}
+</div>
 </section>
       </main>
         )}
@@ -978,7 +1133,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
                             {editingArtifact && <p style={{fontSize: '11px', color: '#666', fontStyle:'italic'}}>Note: Không chọn ảnh nếu muốn giữ ảnh cũ.</p>}
                         </div>
 
-                        {/* Nút bấm thay đổi tùy trạng thái */}
+                    
                         {!editingArtifact ? (
                              <button type="submit" style={btnBrown}>➕ Thêm Vật phẩm</button>
                         ) : (
@@ -1091,7 +1246,6 @@ const initPanoramaViewer = (pano, hotspotData) => {
       </form>
     </section>
 
-    {/* CỘT 2: DANH SÁCH KIẾN THỨC ĐÃ CÓ */}
     <section style={{ ...sectionStyle, flex: 1.5 }}>
       <h3>📚 Danh sách Kiến thức ({knowledgeList.length})</h3>
       
@@ -1147,12 +1301,13 @@ const initPanoramaViewer = (pano, hotspotData) => {
 )}
 
         {activeTab === "timeline" && (
-    <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px" }}>
+    <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px", height: '100%', overflow: 'hidden' }}>
         
-        <section style={{...sectionStyle, flex: 1}}>
-            <h3>{editingEvent ? `✏️ Sửa sự kiện: ${editingEvent.year}` : "⏳ Thêm Sự Kiện Lịch Sử"}</h3>
+        <section style={{...sectionStyle, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            <h3 style={{flexShrink: 0}}>{editingEvent ? `✏️ Sửa sự kiện: ${editingEvent.year}` : "⏳ Thêm Sự Kiện Lịch Sử"}</h3>
             
-            <form onSubmit={handleSaveTimeline}>
+            <form onSubmit={handleSaveTimeline} style={{display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden'}}>
+              <div style={{flex: 1, overflowY: 'auto', paddingRight: '5px'}}>
                 <div style={{marginBottom: '10px'}}>
                    <label style={{fontWeight:'bold', fontSize:'12px'}}>Năm / Giai đoạn:</label>
                    <input type="text" placeholder="VD: 1994, 2010-2015" style={{...inputStyle, width: '100%'}} 
@@ -1175,7 +1330,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
                 </div>
 
                 <div style={{marginBottom: '10px'}}>
-                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Mô tả:</label>
+                   <label style={{fontWeight:'bold', fontSize:'12px'}}>Mô tả (không bắt buộc):</label>
                    <textarea rows="4" placeholder="Mô tả chi tiết sự kiện..." style={{...inputStyle, width: '100%'}} 
                        value={formTimeline.description} onChange={e => setFormTimeline({...formTimeline, description: e.target.value})} 
                    />
@@ -1190,7 +1345,8 @@ const initPanoramaViewer = (pano, hotspotData) => {
                     />
                     {editingEvent && <p style={{fontSize: '11px', color: '#666', fontStyle:'italic', marginTop:'5px'}}>Lưu ý: Nếu chọn ảnh mới, toàn bộ ảnh cũ của sự kiện này sẽ bị thay thế.</p>}
                 </div>
-
+                </div>
+                <div style={{marginTop: '10px', flexShrink: 0}}>
                 {!editingEvent ? (
                     <button type="submit" style={btnBrown}>➕ Thêm Sự Kiện</button>
                 ) : (
@@ -1199,12 +1355,14 @@ const initPanoramaViewer = (pano, hotspotData) => {
                         <button type="button" onClick={handleCancelEditTimeline} style={{...btnBrown, background: '#757575'}}>❌ Hủy</button>
                     </div>
                 )}
+                </div>
             </form>
         </section>
 
         {/* DANH SÁCH SỰ KIỆN */}
-        <section style={{...sectionStyle, flex: 2}}>
-            <h3>Dòng thời gian ({timelineEvents.length})</h3>
+        <section style={{...sectionStyle, flex: 2, display: 'flex', flexDirection: 'column',overflow: 'hidden'}}>
+            <h3 style={{flexShrink: 0}}>Dòng thời gian ({timelineEvents.length})</h3>
+            <div style={{flex: 1, overflowY: 'auto', paddingRight: '5px'}}>
             <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
                 {timelineEvents.map(evt => (
                     <div key={evt.id} style={{
@@ -1212,7 +1370,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
                         display: 'flex', 
                         gap: '15px', 
                         alignItems: 'center',
-                        border: editingEvent?.id === evt.id ? '2px solid #FF9800' : '1px solid #ccc',
+                        border: editingEvent?.id === evt.id ? '1px solid #FF9800' : '1px solid #ccc',
                         background: editingEvent?.id === evt.id ? '#fff3e0' : '#fff'
                     }}>
                         {/* Hiển thị ảnh đầu tiên làm thumbnail */}
@@ -1260,16 +1418,25 @@ const initPanoramaViewer = (pano, hotspotData) => {
                 ))}
                 {timelineEvents.length === 0 && <p style={{color: '#999', fontStyle: 'italic', textAlign:'center', marginTop:'20px'}}>Chưa có sự kiện nào.</p>}
             </div>
+          </div>
         </section>
     </main>
 )}
 
         {activeTab === "quiz" && (
-  <main style={{...scrollableMainStyle, padding: "20px", display: "flex", gap: "20px" }}>
+  <main style={{
+    ...scrollableMainStyle, 
+    padding: "20px", 
+    display: "flex", 
+    gap: "20px",
+    height: '100%',        
+    overflow: 'hidden'    
+  }}>
     <section style={{ ...sectionStyle, flex: 1 }}>
-      <h3>{editingQuestion ? "✏️ Chỉnh sửa câu hỏi" : "📝 Thêm câu hỏi mới"}</h3>
+      <h3 style={{flexShrink: 0}}>{editingQuestion ? "✏️ Chỉnh sửa câu hỏi" : "📝 Thêm câu hỏi mới"}</h3>
       
-      <form onSubmit={handleSaveQuestion} style={quizFormStyle}>
+      <form onSubmit={handleSaveQuestion} style={{ ...quizFormStyle, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: '5px' }}>
         <label style={{fontWeight:'bold'}}>Nội dung câu hỏi:</label>
         <textarea
           name="question"
@@ -1303,14 +1470,16 @@ const initPanoramaViewer = (pano, hotspotData) => {
           name="correctAnswer"
           value={quizForm.correctAnswer}
           onChange={handleQuizFormChange}
-          style={{...quizSelect, width: '100%', padding: '10px'}}
+          style={{...quizSelect, width: '100%', padding: '10px', marginBottom: '10px'}}
         >
           <option value="A">A</option>
           <option value="B">B</option>
           <option value="C">C</option>
           <option value="D">D</option>
         </select>
+      </div>
 
+      <div style={{ marginTop: '10px', flexShrink: 0, paddingTop: '10px', borderTop: '1px solid #eee' }}>
         {!editingQuestion ? (
             <button type="submit" style={{...btnBrown, marginTop: '15px'}}>➕ Thêm câu hỏi</button>
         ) : (
@@ -1319,15 +1488,28 @@ const initPanoramaViewer = (pano, hotspotData) => {
                 <button type="button" onClick={handleCancelEditQuestion} style={{...btnBrown, background: '#757575', flex: 1}}>❌ Hủy</button>
             </div>
         )}
+      </div>
       </form>
     </section>
 
     {/* DANH SÁCH CÂU HỎI */}
-    <section style={{ ...sectionStyle, flex: 2 }}>
-      <h3>📚 Danh sách câu hỏi ({questions.length})</h3>
-      <div style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-      <table style={{ ...tableStyle, fontSize: "14px" }}>
-        <thead>
+    <section style={{ 
+      ...sectionStyle, 
+      flex: 2, 
+      display: 'flex',        
+      flexDirection: 'column',  
+      overflow: 'hidden'       
+    }}>
+      <h3 style={{ flexShrink: 0 }}>📚 Danh sách câu hỏi ({questions.length})</h3>
+      <div style={{ 
+        flex: 1,              
+        overflowY: 'auto',     
+        marginTop: '10px',
+        border: '1px solid #eee',
+        borderRadius: '4px'
+      }}>
+      <table style={{ ...tableStyle, fontSize: "14px", marginTop: 0 }}>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr style={{ background: "#efebe9" }}>
             <th style={{width: '40%'}}>Câu hỏi</th>
             <th style={{width: '35%'}}>Các đáp án</th>
@@ -1521,7 +1703,7 @@ const initPanoramaViewer = (pano, hotspotData) => {
 
 
       <footer style={footerStyle}>
-        © 2025 DTU Virtual Museum — Quản Trị Dữ Liệu
+        © 2025 DTU VM — Quản Trị Dữ Liệu
       </footer>
     </div>
   );

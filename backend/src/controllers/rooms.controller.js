@@ -14,7 +14,6 @@ export const listRooms = async (req, res) => {
   res.json(rooms);
 };
 
-// Lấy chi tiết Room (kèm panoramas)
 export const getRoom = async (req, res) => {
   const room = await models.Room.findByPk(req.params.id, {
     include: [{ model: models.Panorama, as: "panoramas" }],
@@ -31,10 +30,19 @@ export const updateRoom = async (req, res) => {
 };
 
 export const deleteRoom = async (req, res) => {
-  const room = await models.Room.findByPk(req.params.id);
-  if (!room) return res.status(404).json({ error: "Room not found" });
-  await room.destroy();
-  res.json({ message: "Room deleted" });
+  try {
+    const room = await models.Room.findByPk(req.params.id);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    await models.Artifact.destroy({ where: { roomId: room.id } });
+
+    await models.Panorama.destroy({ where: { roomId: room.id } });
+    await room.destroy();
+    
+    res.json({ message: "Đã xóa phòng và toàn bộ dữ liệu bên trong!" });
+  } catch (e) {
+    console.error("Lỗi xóa phòng:", e);
+    res.status(500).json({ error: "Không thể xóa phòng: " + e.message });
+  }
 };
 
 // Đồ thị di chuyển của 1 Room

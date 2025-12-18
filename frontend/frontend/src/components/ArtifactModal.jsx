@@ -10,10 +10,8 @@ export default function ArtifactModal({ artifact, onClose }) {
   const [isPressed, setIsPressed] = useState(false);
   const [isAutoRotating, setIsAutoRotating] = useState(true);
   
-  // Trạng thái panel thông tin (Mặc định ẩn)
-  const [showInfo, setShowInfo] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
   
-  // State Audio
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   
@@ -27,6 +25,8 @@ export default function ArtifactModal({ artifact, onClose }) {
   const shouldPlayRef = useRef(false);
 
   if (!artifact) return null;
+
+  
 
   useEffect(() => {
     const animate = () => {

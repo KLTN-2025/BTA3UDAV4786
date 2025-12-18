@@ -33,7 +33,11 @@ export const RoomAPI = {
     const res = await fetch(`${API_BASE_URL}/rooms/${id}`, {
       method: "DELETE",
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Lỗi khi xóa phòng");
+    }
+    return data;
   },
 
   async getGraph(roomId) {

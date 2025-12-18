@@ -17,7 +17,6 @@ export default function Leaderboard() {
       setLoading(true);
       try {
         const data = await QuizAPI.getLeaderboard();
-        // Backend trả về đã sort sẵn, nhưng ta set vào state để render
         setAllAttempts(data);
       } catch (error) {
         console.error("Lỗi tải BXH:", error);

@@ -1,5 +1,9 @@
 export const googleCallbackSuccess = (req, res) => {
-  res.redirect('http://localhost:5173/learning');
+  if (req.user && req.user.role === 'admin') {
+    res.redirect('http://localhost:5173/dashboard'); 
+  } else {
+    res.redirect('http://localhost:5173/learning');
+  }
 };
 
 // Lấy thông tin user hiện tại từ Session

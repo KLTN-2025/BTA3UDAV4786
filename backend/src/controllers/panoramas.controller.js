@@ -1,6 +1,5 @@
 import models from "../models/index.js";
 
-// Thêm panorama (kèm upload ảnh)
 export const createPanorama = async (req, res) => {
   try {
     const { roomId, title, camX, camY, camZ, targetX, targetY, targetZ } = req.body;
@@ -26,7 +25,7 @@ export const createPanorama = async (req, res) => {
 
     res.status(201).json(pano);
   } catch (e) {
-    console.error("❌ Error creating panorama:", e);
+    console.error("Error creating panorama:", e);
     res.status(400).json({ error: e.message });
   }
 };

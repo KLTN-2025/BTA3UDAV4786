@@ -9,7 +9,12 @@ export default (sequelize, DataTypes) => {
       defaultValue: [] 
     },
     
-    order: { type: DataTypes.INTEGER, defaultValue: 0 }
+    order: { 
+      type: DataTypes.INTEGER, 
+      defaultValue: 0, 
+      unique: {
+            msg: "Số thứ tự này đã tồn tại!"
+        } }
   });
 
   return TimelineEvent;
